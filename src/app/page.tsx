@@ -50,7 +50,7 @@ function Scanner() {
 
       {loading && (
         <div className="card flex items-center gap-3 p-6 text-pump">
-          <motion.span animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }}>⚡</motion.span>
+          <motion.span animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1.8, ease: "linear" }}>⚡</motion.span>
           Sniffing holders, dev wallet, liquidity, authorities, insiders…
         </div>
       )}

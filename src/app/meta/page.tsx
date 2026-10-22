@@ -23,7 +23,7 @@ function Radar() {
           <div className="mb-4 text-xs text-gray-500">{d.totalCoins} coins · sources: {Object.entries(d.sources).map(([k, v]) => `${k} ${v ? "✓" : "✕"}`).join(" · ")}</div>
           <div className="grid gap-4 md:grid-cols-2">
             {d.themes.map((t, i) => (
-              <motion.div key={t.key} className="card p-4" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
+              <motion.div key={t.key} className="card p-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.25, 0.1, 0.25, 1], delay: Math.min(i, 10) * 0.04 }}>
                 <div className="flex items-center gap-2">
                   <span className="text-2xl">{t.emoji}</span>
                   <span className="flex-1 text-lg font-black">{t.label}</span>

@@ -1,4 +1,5 @@
 "use client";
+import { motion } from "framer-motion";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import Gate from "@/components/Gate";
@@ -39,10 +40,10 @@ function Arena() {
         {coins.map((c) => "error" in c ? (
           <div key={c.mint} className="card p-4 text-sm text-gray-400">{c.name} — could not score: {c.error}</div>
         ) : (
-          <div key={c.mint + (at ?? 0)}>
+          <motion.div key={c.mint} layout="position" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.25, 0.1, 0.25, 1], layout: { duration: 0.6, ease: [0.25, 0.1, 0.25, 1] } }}>
             <Reaction r={c} compact />
             <Link href={`/?mint=${c.mint}`} className="mt-1 block text-right text-xs text-pump hover:underline">full breakdown →</Link>
-          </div>
+          </motion.div>
         ))}
       </div>
     </div>

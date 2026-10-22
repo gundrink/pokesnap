@@ -20,7 +20,7 @@ export default function Burn() {
           <div className="text-5xl font-black text-volt">{fmt(b.burned)}</div>
           <div className="text-gray-400">$PokeSnap burned ({b.burnedPct?.toFixed(3)}% of supply)</div>
           <div className="mt-4 h-4 overflow-hidden rounded-full bg-coal-700">
-            <motion.div className="h-full bg-gradient-to-r from-volt to-red-500" initial={{ width: 0 }} animate={{ width: `${Math.max(0.5, b.burnedPct ?? 0)}%` }} transition={{ duration: 1.2 }} />
+            <motion.div className="h-full bg-gradient-to-r from-volt to-red-500" initial={{ width: 0 }} animate={{ width: `${Math.max(0.5, b.burnedPct ?? 0)}%` }} transition={{ duration: 1.4, ease: [0.25, 0.1, 0.25, 1] }} />
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
             <div><div className="text-gray-500">Initial supply</div><b>{fmt(b.initial)}</b></div>

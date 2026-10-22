@@ -4,9 +4,10 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Embers, SeamArcs, boltPath, buildShards, crackLine, flight, hash, rng } from "./Shatter";
 
 /* shared motion vocabulary — springs, not tweens */
-const SPRING_ENTER = { type: "spring", stiffness: 210, damping: 24, mass: 0.9 } as const;
+const SPRING_ENTER = { type: "spring", stiffness: 120, damping: 26, mass: 1 } as const;
 const EASE_OUT = [0.16, 1, 0.3, 1] as const; // expo-ish out
 const EASE_IN = [0.55, 0, 0.85, 0.35] as const;
+const SOFT = [0.25, 0.1, 0.25, 1] as const;
 /** decaying, irregular shake keyframes (seeded) — no metronome wiggle */
 function shake(seed: number, amp: number, n = 7) { const r = rng(seed); const x = [0], y = [0], rot = [0];
   for (let i = 1; i < n; i++) { const d = Math.pow(1 - i / n, 1.7); x.push((r() - 0.5) * 2 * amp * d); y.push((r() - 0.5) * 1.4 * amp * d); rot.push((r() - 0.5) * amp * 0.12 * d); }
@@ -25,7 +26,7 @@ function ScoreRing({ score, size = 84 }: { score: number; size?: number }) {
   const off = useTransform(mv, (v) => c * (1 - v / 100));
   const [shown, setShown] = useState(reduce ? score : 0);
   useEffect(() => { if (reduce) { mv.set(score); setShown(score); return; }
-    const ctl = animate(mv, score, { type: "spring", stiffness: 55, damping: 15, mass: 1, delay: 0.25 });
+    const ctl = animate(mv, score, { type: "spring", stiffness: 32, damping: 18, mass: 1.1, delay: 0.3 });
     const un = mv.on("change", (v) => setShown(Math.max(0, Math.round(v)))); return () => { ctl.stop(); un(); }; }, [score, reduce, mv]);
   return (
     <svg width={size} height={size} className="shrink-0">
@@ -120,7 +121,7 @@ export default function Reaction({ r, compact = false }: { r: ScoreResult; compa
   const [phase, setPhase] = useState<Phase>("attack");
   const reduce = useReducedMotion();
   const seed = useMemo(() => hash(r.mint + ":" + run), [r.mint, run]);
-  const cshake = useMemo(() => shake(seed, 5, 8), [seed]);
+  const cshake = useMemo(() => shake(seed, 2.5, 8), [seed]);
   useEffect(() => {
     if (r.level !== "danger") return;
     if (reduce) { setPhase("stamp"); return; }
@@ -136,15 +137,15 @@ export default function Reaction({ r, compact = false }: { r: ScoreResult; compa
 
   if (r.level === "safe") {
     return (
-      <motion.div key={run} className="card relative overflow-hidden border-pump/40" initial={{ opacity: 0, y: 14, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={SPRING_ENTER}
-        whileHover={{ y: -2, transition: { type: "spring", stiffness: 300, damping: 22 } }}>
+      <motion.div key={run} className="card relative overflow-hidden border-pump/40" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.55, ease: SOFT }}
+        whileHover={{ y: -1, transition: { duration: 0.3, ease: SOFT } }}>
         {replay}
         <motion.div className="absolute inset-0 rounded-2xl" animate={{ boxShadow: ["inset 0 0 0px #4ADE8000", "inset 0 0 22px #4ADE8030", "inset 0 0 0px #4ADE8000"] }} transition={{ duration: 3.7, repeat: Infinity, ease: "easeInOut" }} />
         <Sparks n={5} color="#4ADE80" />
         <div className={compact ? "" : "flex items-center"}>
           <div className="flex-1"><CoinFace r={r} compact={compact} /></div>
           {!compact && (
-            <motion.img src="/mascot-calm.jpg" alt="PokeSnap calm" className="z-10 m-4 h-40 w-40 rounded-2xl object-cover" initial={{ scale: 0.86, opacity: 0, rotate: -3, y: 8 }} animate={{ scale: 1, opacity: 1, rotate: 0, y: 0 }} transition={{ type: "spring", stiffness: 170, damping: 13, delay: 0.32 }} />
+            <motion.img src="/mascot-calm.jpg" alt="PokeSnap calm" className="z-10 m-4 h-40 w-40 rounded-2xl object-cover" initial={{ scale: 0.86, opacity: 0, rotate: -3, y: 8 }} animate={{ scale: 1, opacity: 1, rotate: 0, y: 0 }} transition={{ type: "spring", stiffness: 90, damping: 20, delay: 0.32 }} />
           )}
         </div>
         <div className="relative z-10 px-4 pb-3 text-xs text-pump">⚡ PokeSnap approves. Card stays clean.</div>
@@ -154,7 +155,7 @@ export default function Reaction({ r, compact = false }: { r: ScoreResult; compa
 
   if (r.level === "caution") {
     return (
-      <motion.div key={run} className="card relative overflow-hidden border-volt/50" initial={{ opacity: 0, y: 12 }}
+      <motion.div key={run} className="card relative overflow-hidden border-volt/50" initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, ...cshake } as never}
         transition={{ opacity: { duration: 0.3 }, y: SPRING_ENTER, default: { duration: 0.7, delay: 0.35, ease: EASE_OUT } }}>
         {replay}
@@ -180,8 +181,8 @@ function Danger({ r, compact, run, replay, phase, reduce, seed }: { r: ScoreResu
   const flights = useMemo(() => { const rr = rng(seed ^ 0x51ed); return shards.map((s) => flight(s, rr, sz.w, sz.h)); }, [shards, seed, sz]);
   const origins = useMemo(() => seams.flatMap((s) => [s[Math.floor(s.length / 2)]]), [seams]);
   const flew = phase === "shatter" || phase === "stamp";
-  const dshake = useMemo(() => shake(seed ^ 0xd1, 11, 9), [seed]);
-  const sshake = useMemo(() => shake(seed ^ 0x5a, 5, 6), [seed]);
+  const dshake = useMemo(() => shake(seed ^ 0xd1, 5.5, 9), [seed]);
+  const sshake = useMemo(() => shake(seed ^ 0x5a, 2.5, 6), [seed]);
   const face = (
     <div className="absolute inset-0 rounded-2xl bg-coal-900">
       <CoinFace r={r} compact={compact} />
@@ -191,7 +192,7 @@ function Danger({ r, compact, run, replay, phase, reduce, seed }: { r: ScoreResu
   return (
     <motion.div key={run} ref={box}
       className={`card relative border-red-500/70 shadow-danger ${flew ? "overflow-visible" : "overflow-hidden"} ${compact ? "min-h-[230px]" : "min-h-[440px]"}`}
-      initial={{ opacity: 0, y: 14 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={phase === "strike" ? { opacity: 1, ...dshake, scaleX: [1, 1.012, 0.994, 1], scaleY: [1, 0.982, 1.006, 1] }
         : phase === "stamp" && !reduce ? { opacity: 1, ...sshake } : { opacity: 1, x: 0, y: 0, rotate: 0 }}
       transition={phase === "attack" ? SPRING_ENTER : phase === "stamp" ? { duration: 0.55, delay: 0.08, ease: EASE_OUT } : { duration: 0.5, ease: EASE_OUT }}
@@ -244,7 +245,7 @@ function Danger({ r, compact, run, replay, phase, reduce, seed }: { r: ScoreResu
                 animate={{ opacity: [0, 1, 0.2, 1, 0], clipPath: ["inset(0 0 100% 0)", "inset(0 0 0% 0)", "inset(0 0 0% 0)", "inset(0 0 0% 0)", "inset(0 0 0% 0)"] }} transition={{ duration: 0.55, times: [0, 0.12, 0.3, 0.42, 1] }}>
                 <Bolt className="h-full w-full" seed={seed} />
               </motion.div>
-              <motion.div className="pointer-events-none fixed inset-0 z-[60] bg-[#fffaf0]" initial={{ opacity: 0 }} animate={{ opacity: [0, 0.55, 0.04, 0.28, 0] }} transition={{ duration: 0.6, times: [0, 0.05, 0.22, 0.32, 1], ease: "easeOut" }} />
+              <motion.div className="pointer-events-none fixed inset-0 z-[60] bg-[#fffaf0]" initial={{ opacity: 0 }} animate={{ opacity: [0, 0.26, 0.03, 0.12, 0] }} transition={{ duration: 0.6, times: [0, 0.05, 0.22, 0.32, 1], ease: "easeOut" }} />
               <motion.div className="pointer-events-none absolute inset-0 z-10 rounded-2xl" initial={{ opacity: 0 }} animate={{ opacity: [0, 1, 0.4] }} transition={{ duration: 0.6 }}
                 style={{ background: "radial-gradient(circle at 50% 50%, #ffe9b033, #ff8a3d14 40%, transparent 70%)" }} />
               <Embers origins={origins} count={compact ? 80 : 180} delay={520} duration={3200} />
@@ -255,11 +256,11 @@ function Danger({ r, compact, run, replay, phase, reduce, seed }: { r: ScoreResu
             style={{ background: "radial-gradient(ellipse at 50% 60%, #2a0d05 0%, #0b0d0c 70%)", boxShadow: "inset 0 0 50px #ff3b1f2a" }} />
           {phase === "stamp" && (
             <motion.div className="absolute inset-0 z-50 flex flex-col items-center justify-center"
-              initial={reduce ? { opacity: 1 } : { scale: 1.9, opacity: 0, y: -18 }} animate={{ scale: [null, 0.94, 1], opacity: 1, y: 0 }}
-              transition={reduce ? { duration: 0 } : { scale: { duration: 0.42, times: [0, 0.55, 1], ease: [EASE_IN, EASE_OUT] }, opacity: { duration: 0.12 }, y: { duration: 0.23, ease: EASE_IN } }}>
+              initial={reduce ? { opacity: 1 } : { scale: 1.35, opacity: 0, y: -8 }} animate={{ scale: [null, 0.98, 1], opacity: 1, y: 0 }}
+              transition={reduce ? { duration: 0 } : { scale: { duration: 0.55, times: [0, 0.55, 1], ease: [EASE_IN, EASE_OUT] }, opacity: { duration: 0.2 }, y: { duration: 0.3, ease: EASE_IN } }}>
               {!reduce && <motion.div className="absolute h-36 w-56 rounded-[45%] border-2 border-red-500/60" initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 2.4, opacity: [0, 0.6, 0] }} transition={{ duration: 0.8, delay: 0.22, ease: EASE_OUT }} />}
               <Stamp seed={seed} color="#e0393e" compact={compact} big />
-              <motion.div className="mt-4 rounded bg-coal-950/90 px-3 py-1 text-center" initial={{ opacity: 0, y: 8, rotate: 0 }} animate={{ opacity: 1, y: 0, rotate: 4 }} transition={{ type: "spring", stiffness: 220, damping: 16, delay: 0.38 }}>
+              <motion.div className="mt-4 rounded bg-coal-950/90 px-3 py-1 text-center" initial={{ opacity: 0, y: 8, rotate: 0 }} animate={{ opacity: 1, y: 0, rotate: 4 }} transition={{ type: "spring", stiffness: 110, damping: 22, delay: 0.4 }}>
                 <div className="font-black">{r.name} <span className="text-pump">${r.symbol}</span></div>
                 <div className="text-sm text-red-400">score {r.score}/100</div>
               </motion.div>
@@ -287,8 +288,8 @@ function Suspicious({ r, compact, run, replay, reduce, seed }: { r: ScoreResult;
   const rightPoly = [...line, [100, 100], [100, 0]] as [number, number][];
   const clip = (P: [number, number][]) => `polygon(${P.map((p) => `${p[0].toFixed(2)}% ${p[1].toFixed(2)}%`).join(",")})`;
   const split = ph === "split" || ph === "stamp";
-  const hs = useMemo(() => shake(seed ^ 0x41, 4, 7), [seed]);
-  const ss = useMemo(() => shake(seed ^ 0x42, 4, 6), [seed]);
+  const hs = useMemo(() => shake(seed ^ 0x41, 2, 7), [seed]);
+  const ss = useMemo(() => shake(seed ^ 0x42, 2, 6), [seed]);
   const jr = useMemo(() => { const q = rng(seed ^ 0x99); return { l: -3.2 - q() * 2, rr: 2.6 + q() * 2, ly: 0.25 + q() * 0.2, ry: 0.05 + q() * 0.2, d: 0.03 + q() * 0.06 }; }, [seed]);
   const cracked = ph !== "hit";
   const face = (
@@ -312,7 +313,7 @@ function Suspicious({ r, compact, run, replay, reduce, seed }: { r: ScoreResult;
       initial={reduce ? tgt : { x: 0, y: 0, rotate: 0 }}
       animate={split ? tgt : ph === "crack" ? { x: -side * 1.5, y: 2.5, rotate: side * 0.9, scaleY: 0.992 } : { x: 0, y: 0, rotate: 0 }}
       transition={reduce ? { duration: 0 } : split
-        ? { type: "spring", stiffness: side < 0 ? 120 : 150, damping: side < 0 ? 8.5 : 10, mass: side < 0 ? 1.25 : 1, delay: side < 0 ? 0 : jr.d, restDelta: 0.001 }
+        ? { type: "spring", stiffness: side < 0 ? 85 : 100, damping: side < 0 ? 13 : 15, mass: side < 0 ? 1.25 : 1, delay: side < 0 ? 0 : jr.d, restDelta: 0.001 }
         : { duration: 0.75, ease: [0.4, 0, 0.6, 1] }}>
       <div className="absolute inset-0" style={{ clipPath: clip(P), WebkitClipPath: clip(P) }}>
         {face}
@@ -336,7 +337,7 @@ function Suspicious({ r, compact, run, replay, reduce, seed }: { r: ScoreResult;
       {half(rightPoly, { x: gap * 0.55, y: gap * jr.ry, rotate: jr.rr }, `${line[line.length - 1][0]}% 100%`, 1)}
       {!reduce && (
         <>
-          <motion.div className="pointer-events-none fixed inset-0 z-[60] bg-[#fffaf0]" initial={{ opacity: 0 }} animate={{ opacity: [0, 0.5, 0.03, 0.22, 0] }} transition={{ duration: 0.6, delay: 0.08, times: [0, 0.05, 0.22, 0.32, 1] }} />
+          <motion.div className="pointer-events-none fixed inset-0 z-[60] bg-[#fffaf0]" initial={{ opacity: 0 }} animate={{ opacity: [0, 0.24, 0.02, 0.1, 0] }} transition={{ duration: 0.6, delay: 0.08, times: [0, 0.05, 0.22, 0.32, 1] }} />
           <motion.div className="pointer-events-none absolute -top-6 z-40 h-[110%] w-20" style={{ left: `${line[0][0] - 6}%` }} initial={{ opacity: 0, clipPath: "inset(0 0 100% 0)" }}
             animate={{ opacity: [0, 1, 0.15, 0.9, 0], clipPath: ["inset(0 0 100% 0)", "inset(0 0 0% 0)", "inset(0 0 0% 0)", "inset(0 0 0% 0)", "inset(0 0 0% 0)"] }} transition={{ duration: 0.6, delay: 0.04, times: [0, 0.12, 0.3, 0.42, 1] }}>
             <Bolt className="h-full w-full" seed={seed ^ 3} />
@@ -355,8 +356,8 @@ function Suspicious({ r, compact, run, replay, reduce, seed }: { r: ScoreResult;
       )}
       {ph === "stamp" && (
         <motion.div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center"
-          initial={reduce ? { opacity: 1 } : { scale: 1.8, opacity: 0, y: -14 }} animate={{ scale: [null, 0.95, 1], opacity: 1, y: 0 }}
-          transition={reduce ? { duration: 0 } : { scale: { duration: 0.4, times: [0, 0.55, 1], ease: [EASE_IN, EASE_OUT] }, opacity: { duration: 0.12 }, y: { duration: 0.22, ease: EASE_IN } }}>
+          initial={reduce ? { opacity: 1 } : { scale: 1.3, opacity: 0, y: -6 }} animate={{ scale: [null, 0.985, 1], opacity: 1, y: 0 }}
+          transition={reduce ? { duration: 0 } : { scale: { duration: 0.52, times: [0, 0.55, 1], ease: [EASE_IN, EASE_OUT] }, opacity: { duration: 0.2 }, y: { duration: 0.3, ease: EASE_IN } }}>
           {!reduce && <motion.div className="absolute h-28 w-48 rounded-[45%] border-2 border-orange-500/60" initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 2.2, opacity: [0, 0.55, 0] }} transition={{ duration: 0.75, delay: 0.2, ease: EASE_OUT }} />}
           <Stamp seed={seed} color="#e8732c" compact={compact} />
         </motion.div>

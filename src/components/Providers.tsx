@@ -6,6 +6,7 @@ import { SolflareWalletAdapter } from "@solana/wallet-adapter-solflare";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { tierFor, UNLOCK_ALL, POKESNAP_MINT, type TierName } from "@/lib/tiers";
 import "@solana/wallet-adapter-react-ui/styles.css";
+import { MotionConfig } from "framer-motion";
 
 type TierCtx = { balance: number; tier: TierName; loading: boolean; unlockAll: boolean; mintConfigured: boolean; error?: string };
 const Ctx = createContext<TierCtx>({ balance: 0, tier: "Free", loading: false, unlockAll: UNLOCK_ALL, mintConfigured: !!POKESNAP_MINT });
@@ -36,6 +37,7 @@ export default function Providers({ children }: { children: ReactNode }) {
   const endpoint = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
   const wallets = useMemo(() => [new PhantomWalletAdapter(), new SolflareWalletAdapter()], []);
   return (
+    <MotionConfig reducedMotion="user">
     <ConnectionProvider endpoint={endpoint}>
       <WalletProvider wallets={wallets} autoConnect>
         <WalletModalProvider>
@@ -43,5 +45,6 @@ export default function Providers({ children }: { children: ReactNode }) {
         </WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>
+    </MotionConfig>
   );
 }
