@@ -11,14 +11,24 @@ type Theme = { key: string; label: string; emoji: string; count: number; totalMc
 function Radar() {
   const [d, setD] = useState<{ totalCoins: number; themes: Theme[]; sources: Record<string, boolean> } | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  useEffect(() => { fetch("/api/meta").then((r) => r.json()).then(setD).catch((e) => setErr(String(e))); }, []);
+  useEffect(() => {
+    let alive = true, tries = 0, t: ReturnType<typeof setTimeout> | undefined;
+    const load = () => fetch("/api/meta").then((r) => r.json()).then((j) => {
+      if (!alive) return;
+      setD(j);
+      // scores still filling in (or stale cache being refreshed): poll a few more times
+      if ((j.partial || j.stale) && ++tries < 6) t = setTimeout(load, 6_000);
+    }).catch((e) => alive && setErr(String(e)));
+    load();
+    return () => { alive = false; if (t) clearTimeout(t); };
+  }, []);
   const max = Math.max(1, ...(d?.themes.map((t) => t.count) ?? [1]));
   return (
     <div>
       <h1 className="text-3xl font-black">Meta <span className="text-volt">Radar</span></h1>
       <p className="mb-4 text-gray-400">Recent + movers + graduated pump.fun coins grouped into themes by keyword rules. Avg score sampled from the biggest coins per theme.</p>
       {err && <div className="text-red-400">{err}</div>}
-      {!d && !err && <div className="text-pump">⚡ Scanning pump.fun & scoring samples (~20-40s)…</div>}
+      {!d && !err && <div className="text-pump">⚡ Scanning pump.fun & scoring samples …</div>}
       {d && (
         <>
           <div className="mb-4 text-xs text-gray-500">{d.totalCoins} coins · sources: {Object.entries(d.sources).map(([k, v]) => `${k} ${v ? "✓" : "✕"}`).join(" · ")}</div>

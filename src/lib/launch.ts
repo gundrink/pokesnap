@@ -51,14 +51,40 @@ async function pageTrades(mint: string, cursor: string, maxPages: number) {
   return { trades: out, complete: false };
 }
 
-export async function launchStats(mint: string, creator: string | undefined, supply: number, createdMs?: number) {
+// launch-window trades are immutable: cache them 30 min. Whole result cached 60s (recent flow changes).
+const windowCache = new Map<string, { at: number; p: Promise<{ trades: Trade[]; complete: boolean; error?: string }> }>();
+const statsCache = new Map<string, { at: number; p: ReturnType<typeof launchStatsInner> }>();
+
+export function launchStats(mint: string, creator: string | undefined, supply: number, createdMs?: number) {
+  const hit = statsCache.get(mint);
+  if (hit && Date.now() - hit.at < 60_000) return hit.p;
+  const p = launchStatsInner(mint, creator, supply, createdMs);
+  statsCache.set(mint, { at: Date.now(), p });
+  p.then((r) => { if (!r.ok) statsCache.delete(mint); });
+  if (statsCache.size > 1000) statsCache.delete(statsCache.keys().next().value as string);
+  return p;
+}
+
+function windowTrades(mint: string, createdMs: number) {
+  const hit = windowCache.get(mint);
+  if (hit && Date.now() - hit.at < 30 * 60_000) return hit.p;
+  const p = pageTrades(mint, `9999999999999999999999-${createdMs + 15_000}`, 25);
+  windowCache.set(mint, { at: Date.now(), p });
+  p.then((w) => { if (!w.complete) windowCache.delete(mint); });
+  if (windowCache.size > 1000) windowCache.delete(windowCache.keys().next().value as string);
+  return p;
+}
+
+async function launchStatsInner(mint: string, creator: string | undefined, supply: number, createdMs?: number) {
   const started = Date.now();
-  const recent = await pageTrades(mint, "0", 5);
+  // fetch recent page and (for older coins) the launch window in parallel
+  const winP = createdMs && Date.now() - createdMs > 60_000 ? windowTrades(mint, createdMs) : undefined;
+  const recent = await pageTrades(mint, "0", winP ? 2 : 5);
   if (!recent.trades.length) return { ok: false as const, error: `pump.fun trades: ${recent.error ?? "no trades"}`, ms: Date.now() - started };
   let windowT: Trade[] = [];
   let complete = recent.complete;
   if (!complete && createdMs) {
-    const w = await pageTrades(mint, `9999999999999999999999-${createdMs + 15_000}`, 25);
+    const w = await (winP ?? windowTrades(mint, createdMs));
     windowT = w.trades;
     complete = w.complete;
   }

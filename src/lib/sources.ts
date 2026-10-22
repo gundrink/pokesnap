@@ -34,7 +34,7 @@ export type PumpCoin = {
 export const coinMcapUsd = (c: PumpCoin) => c.market_cap_usd ?? c.usd_market_cap ?? undefined;
 
 export function pumpCoin(mint: string) {
-  return fetchJson<PumpCoin>(`${PUMP}/coins-v2/${mint}`);
+  return fetchJson<PumpCoin>(`${PUMP}/coins-v2/${mint}`, { ttlMs: 60_000, timeoutMs: 5_000 });
 }
 
 export async function pumpBoard(board: "movers" | "graduated" | "recent", limit = 30) {
@@ -69,7 +69,7 @@ export type DexPair = {
   info?: { imageUrl?: string; socials?: { type: string; url: string }[]; websites?: { url: string }[] };
 };
 export function dexToken(mint: string) {
-  return fetchJson<{ pairs: DexPair[] | null }>(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
+  return fetchJson<{ pairs: DexPair[] | null }>(`https://api.dexscreener.com/latest/dex/tokens/${mint}`, { ttlMs: 45_000, timeoutMs: 5_000 });
 }
 
 export type RugReport = {
@@ -93,12 +93,13 @@ export type RugReport = {
   score?: number;
 };
 export function rugReport(mint: string) {
-  return fetchJson<RugReport>(`https://api.rugcheck.xyz/v1/tokens/${mint}/report`, { ttlMs: 90_000, timeoutMs: 12_000 });
+  return fetchJson<RugReport>(`https://api.rugcheck.xyz/v1/tokens/${mint}/report`, { ttlMs: 5 * 60_000, timeoutMs: 6_000 });
 }
 
 export async function rpc<T = any>(method: string, params: unknown[], ttlMs = 30_000) {
   const r = await fetchJson<{ result?: T; error?: { message: string } }>(RPC_URL, {
     ttlMs,
+    timeoutMs: 5_000,
     init: {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -115,7 +116,7 @@ export async function mintInfo(mint: string) {
   const r = await rpc<{ value: { data: { parsed: { info: MintInfo } } } | null }>("getAccountInfo", [
     mint,
     { encoding: "jsonParsed" },
-  ]);
+  ], 10 * 60_000);
   if (!r.ok) return r;
   const info = r.data?.value?.data?.parsed?.info;
   if (!info) return { ok: false as const, error: "mint account not found", ms: r.ms };

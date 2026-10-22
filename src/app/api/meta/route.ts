@@ -3,12 +3,20 @@ import { mapLimit } from "@/lib/fetcher";
 import { scoreMint } from "@/lib/score";
 import { coinMcapUsd, pumpBoard, type PumpCoin } from "@/lib/sources";
 import { classify, THEMES } from "@/lib/themes";
+import { swr } from "@/lib/swr";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
   const sample = Math.min(Number(new URL(req.url).searchParams.get("sample") ?? 2), 4);
+  const { v, stale } = await swr(`meta:${sample}`, 120_000, 20 * 60_000, () => buildMeta(sample));
+  return NextResponse.json({ ...v, stale });
+}
+
+async function buildMeta(sample: number) {
+  // light scoring with a hard budget: themes return on time; unscored samples show "…" and fill on next refresh
+  const deadline = Date.now() + 4_500;
   const [recent, movers, grad] = await Promise.all([pumpBoard("recent", 50), pumpBoard("movers", 40), pumpBoard("graduated", 40)]);
   const coins = new Map<string, PumpCoin>();
   for (const r of [movers, grad, recent]) if (r.ok) r.data.forEach((c) => coins.set(c.mint, c));
@@ -19,11 +27,12 @@ export async function GET(req: Request) {
       groups.get(k)!.push(c);
     }
   }
-  const themes = await mapLimit([...groups.entries()], 2, async ([key, list]) => {
+  const themes = await mapLimit([...groups.entries()], 8, async ([key, list]) => {
     list.sort((a, b) => (coinMcapUsd(b) ?? 0) - (coinMcapUsd(a) ?? 0));
-    const sampled = await mapLimit(list.slice(0, sample), 2, async (c) => {
+    const sampled = await mapLimit(list.slice(0, sample), sample, async (c) => {
       try {
-        const s = await scoreMint(c.mint);
+        const s = await Promise.race([scoreMint(c.mint, { light: true }), new Promise<null>((r) => setTimeout(() => r(null), Math.max(0, deadline - Date.now())))]);
+        if (!s) return null;
         return { mint: c.mint, score: s.score };
       } catch {
         return null;
@@ -43,10 +52,11 @@ export async function GET(req: Request) {
     };
   });
   themes.sort((a, b) => b.count - a.count);
-  return NextResponse.json({
+  return {
     totalCoins: coins.size,
     sources: { recent: recent.ok, movers: movers.ok, graduated: grad.ok },
     themes,
+    partial: themes.some((t) => t.scoredSample < Math.min(sample, t.count)),
     at: Date.now(),
-  });
+  };
 }

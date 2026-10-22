@@ -8,7 +8,7 @@ export async function fetchJson<T = any>(
   url: string,
   opts: { ttlMs?: number; timeoutMs?: number; init?: RequestInit; cacheKey?: string } = {}
 ): Promise<SourceResult<T>> {
-  const { ttlMs = 45_000, timeoutMs = 9_000, init, cacheKey } = opts;
+  const { ttlMs = 45_000, timeoutMs = 5_000, init, cacheKey } = opts;
   const key = cacheKey ?? `${init?.method ?? "GET"} ${url} ${typeof init?.body === "string" ? init.body : ""}`;
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < ttlMs) return hit.value as SourceResult<T>;

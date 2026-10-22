@@ -17,7 +17,7 @@ function Scanner() {
   const sp = useSearchParams();
   const router = useRouter();
   const [mint, setMint] = useState(sp.get("mint") ?? "");
-  const { data, error, loading, run } = useScore();
+  const { data, error, loading, deepLoading, run } = useScore();
   const [watched, setWatched] = useState(false);
 
   useEffect(() => {
@@ -58,6 +58,12 @@ function Scanner() {
       {data && !loading && (
         <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr]" id="result">
           <div className="space-y-3">
+            {deepLoading && (
+              <div className="flex items-center gap-2 rounded-lg border border-volt/30 bg-coal-900/60 px-3 py-2 text-xs text-volt">
+                <motion.span animate={{ opacity: [0.35, 1, 0.35] }} transition={{ repeat: Infinity, duration: 1.6, ease: "easeInOut" }}>●</motion.span>
+                Deep check running… tracing launch snipers & wallet funding. Score may update.
+              </div>
+            )}
             <Reaction r={data} />
             <div className="flex flex-wrap gap-2">
               <button className="btn-ghost text-sm" onClick={() => run(data.mint, true)}>↻ Re-score (fresh)</button>

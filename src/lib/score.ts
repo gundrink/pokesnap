@@ -43,6 +43,9 @@ export type ScoreResult = {
   };
   links: { pump: string; dex?: string; rugcheck: string; twitter?: string; website?: string; telegram?: string };
   scoredAt: number;
+  /** true when this is a fast result and the deep (wallet-funding) check is still pending */
+  deepPending?: boolean;
+  deep?: boolean;
 };
 
 export const levelOf = (s: number): ScoreResult["level"] =>
@@ -54,11 +57,46 @@ const usd = (n?: number) =>
 
 const resultCache = new Map<string, { at: number; r: ScoreResult }>();
 
-export async function scoreMint(mint: string, { force = false } = {}): Promise<ScoreResult> {
-  const hit = resultCache.get(mint);
-  if (!force && hit && Date.now() - hit.at < 60_000) return hit.r;
+const withDeadline = <T,>(p: Promise<T>, deadline: number | undefined): Promise<T | undefined> =>
+  deadline == null ? p : Promise.race([p, new Promise<undefined>((r) => setTimeout(() => r(undefined), Math.max(0, deadline - Date.now())))]);
 
-  const [pumpR, dexR, rugR, mintR] = await Promise.all([pumpCoin(mint), dexToken(mint), rugReport(mint), mintInfo(mint)]);
+// in-flight dedupe so concurrent scans of the same coin share work
+const inflight = new Map<string, Promise<ScoreResult>>();
+
+/**
+ * deep=false (default): fast score — all sources in parallel, ~4.5s budget, wallet-funding trace only if already cached.
+ * deep=true: waits for the launch-trade forensics and wallet-funding trace (strict final score).
+ */
+export async function scoreMint(mint: string, { force = false, deep = false, light = false } = {}): Promise<ScoreResult> {
+  const dHit = resultCache.get(`${mint}:d`);
+  if (!force && dHit && Date.now() - dHit.at < 120_000) return dHit.r;
+  if (!deep) {
+    const fHit = resultCache.get(`${mint}:f`);
+    if (!force && fHit && Date.now() - fHit.at < 60_000) return fHit.r;
+  }
+  const key = `${mint}:${deep ? "d" : light ? "l" : "f"}:${force ? 1 : 0}`;
+  const running = inflight.get(key);
+  if (running) return running;
+  const p = scoreMintInner(mint, deep, light && !deep).finally(() => inflight.delete(key));
+  inflight.set(key, p);
+  return p;
+}
+
+async function scoreMintInner(mint: string, deep: boolean, light: boolean): Promise<ScoreResult> {
+  const deadline = deep ? undefined : Date.now() + 4_500;
+  const pumpP = pumpCoin(mint), dexP = dexToken(mint), rugP = rugReport(mint), mintP = mintInfo(mint);
+  // launch forensics start as soon as pump.fun + mint supply are known (don't wait for RugCheck)
+  const launchP = Promise.all([pumpP, mintP]).then(async ([pr, mr]) => {
+    const pc = pr.ok && pr.data?.mint === mint ? pr.data : undefined;
+    let sup: number | undefined, dec = 6;
+    if (mr.ok) { dec = mr.data.decimals; sup = Number(mr.data.supply) / 10 ** dec; }
+    else { const rr = await rugP; if (rr.ok && rr.data.token) sup = rr.data.token.supply / 10 ** rr.data.token.decimals; }
+    if (!sup) return undefined;
+    const rr = pc?.creator ? undefined : await rugP;
+    const creator = pc?.creator ?? (rr?.ok ? rr.data.creator ?? undefined : undefined);
+    return launchStats(mint, creator, sup, pc?.created_timestamp);
+  });
+  const [pumpR, dexR, rugR, mintR] = await Promise.all([pumpP, dexP, rugP, mintP]);
   const sources: SourceStatus[] = [
     { name: "pump.fun", ok: pumpR.ok, ms: pumpR.ms, error: pumpR.ok ? undefined : pumpR.error },
     { name: "DexScreener", ok: dexR.ok, ms: dexR.ms, error: dexR.ok ? undefined : dexR.error },
@@ -92,12 +130,15 @@ export async function scoreMint(mint: string, { force = false } = {}): Promise<S
   const creatorAddr = pump?.creator ?? rug?.creator ?? undefined;
   const ageMs = pump?.created_timestamp ? Date.now() - pump.created_timestamp : undefined;
   // launch forensics from pump.fun trade feed (seeks directly to the launch window)
-  let launchR = supply ? await launchStats(mint, creatorAddr, supply, pump?.created_timestamp) : undefined;
-  if (launchR && !launchR.ok && pump) { await new Promise((r) => setTimeout(r, 1500)); launchR = await launchStats(mint, creatorAddr, supply!, pump?.created_timestamp); }
   const warnings: string[] = [];
   const severe: string[] = [];
-  const funderP: Promise<FunderStats | undefined> = rug ? funderStats(holders.map((h) => ({ owner: h.owner, pct: h.pct }))).catch(() => undefined) : Promise.resolve(undefined);
+  // wallet-funding trace runs in the background (cached 30 min); fast mode only uses it if ready in time
+  const funderP: Promise<FunderStats | undefined> = rug && !light ? funderStats(holders.map((h) => ({ owner: h.owner, pct: h.pct }))).catch(() => undefined) : Promise.resolve(undefined);
+  let launchR = await withDeadline(launchP, deadline);
+  let launchPending = !!deadline && launchR === undefined && !!supply;
+  if (deep && launchR && !launchR.ok && pump) { await new Promise((r) => setTimeout(r, 1200)); launchR = await launchStats(mint, creatorAddr, supply!, pump?.created_timestamp); }
   if (launchR) sources.push({ name: "pump.fun trades", ok: launchR.ok, ms: launchR.ms, error: launchR.ok ? undefined : launchR.error });
+  else if (launchPending) sources.push({ name: "pump.fun trades", ok: false, ms: 0, error: "still loading (deep check)" });
   const L: LaunchStats | undefined = launchR?.ok ? launchR.data : undefined;
 
   // 1. Holder bundle pattern (25)
@@ -270,7 +311,8 @@ export async function scoreMint(mint: string, { force = false } = {}): Promise<S
   {
     const w = 20;
     if (!L || !L.complete) {
-      if (pump) warnings.push(L ? "Launch window not reached in pump.fun trade feed — sniper/bundle check incomplete" : "pump.fun trade feed unavailable (rate-limited) — sniper/bundle check skipped, score is NOT boosted for it");
+      if (pump && launchPending) warnings.push("Launch sniper/bundle forensics still loading — deep check running");
+      else if (pump) warnings.push(L ? "Launch window not reached in pump.fun trade feed — sniper/bundle check incomplete" : "pump.fun trade feed unavailable (rate-limited) — sniper/bundle check skipped, score is NOT boosted for it");
       factors.push({ key: "snipe", label: "Snipers & launch bundle", weight: w, points: L ? 8 : 5, status: "unknown", evidence: [L ? "Launch window not found in pump.fun trade feed (coin not launched on pump.fun?)" : "pump.fun trade feed unavailable"] });
     } else {
       const s = L.sniperPct, b = L.creationSlotBuyPct;
@@ -365,11 +407,14 @@ export async function scoreMint(mint: string, { force = false } = {}): Promise<S
   }
 
   // 12. Same-funder wallet clusters & fresh wallets (10)
-  const F = await funderP;
+  const F = light ? undefined : await withDeadline(funderP, deadline ? Math.max(deadline, Date.now() + 300) : Date.now() + 15_000);
+  const funderPending = !deep && !!rug && F === undefined;
   {
     const w = 10;
     if (!F || !F.ok) {
-      if (rug) warnings.push(`Wallet-funding check unavailable (${F?.error ?? "RPC error"}) — insider clusters not verified`);
+      if (rug && light) warnings.push("Quick scan — wallet-funding trace skipped (open full breakdown for the deep check)");
+      else if (rug && funderPending) warnings.push("Wallet-funding trace still running — deep check running");
+      else if (rug) warnings.push(`Wallet-funding check unavailable (${F?.error ?? "timed out"}) — insider clusters not verified`);
       factors.push({ key: "cluster", label: "Same-funder clusters & fresh wallets", weight: w, points: 4, status: "unknown", evidence: [F?.error ?? "Funding trace unavailable"] });
     } else {
       const c = F.clusteredPct, fr = F.freshPct;
@@ -492,8 +537,10 @@ export async function scoreMint(mint: string, { force = false } = {}): Promise<S
     },
     scoredAt: Date.now(),
   };
+  result.deep = !launchPending && !funderPending;
+  result.deepPending = !result.deep;
   // don't pin an incomplete result: rescans after a rate-limit should retry the sources
-  resultCache.set(mint, { at: warnings.length ? Date.now() - 45_000 : Date.now(), r: result });
+  resultCache.set(`${mint}:${result.deep ? "d" : "f"}`, { at: warnings.length ? Date.now() - 45_000 : Date.now(), r: result });
   if (score < 25) await recordShame(result).catch(() => {});
   return result;
 }

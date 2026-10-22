@@ -18,12 +18,12 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let chain: Promise<unknown> = Promise.resolve();
 // global RPC throttle (~6 req/s) so concurrent scans don't 429 the public endpoint
 function throttled<T>(fn: () => Promise<T>): Promise<T> {
-  const p = chain.then(() => sleep(160)).then(fn);
+  const p = chain.then(() => sleep(110)).then(fn);
   chain = p.catch(() => {});
   return p;
 }
 async function call<T>(method: string, params: unknown[]) {
-  for (let a = 0; a < 3; a++) {
+  for (let a = 0; a < 2; a++) {
     const r = await throttled(() => rpc<T>(method, params, 600_000));
     if (r.ok) return r;
     if (!/429|timeout|rate/i.test(r.error)) return r;
@@ -55,7 +55,20 @@ async function firstFunder(wallet: string) {
   return v;
 }
 
-export async function funderStats(holders: { owner: string; pct: number }[], max = 15): Promise<FunderStats> {
+// memoize whole traces (by holder set) so a fast scan's background trace is reused by the deep request
+const traces = new Map<string, { at: number; p: Promise<FunderStats> }>();
+export function funderStats(holders: { owner: string; pct: number }[], max = 8): Promise<FunderStats> {
+  const key = holders.filter((h) => h.pct > 0.05).slice(0, max).map((h) => h.owner).join(",");
+  const hit = traces.get(key);
+  if (hit && Date.now() - hit.at < 15 * 60_000) return hit.p;
+  const p = funderStatsInner(holders, max);
+  traces.set(key, { at: Date.now(), p });
+  p.then((r) => { if (!r.ok) traces.delete(key); }, () => traces.delete(key));
+  if (traces.size > 500) traces.delete(traces.keys().next().value as string);
+  return p;
+}
+
+async function funderStatsInner(holders: { owner: string; pct: number }[], max: number): Promise<FunderStats> {
   const top = holders.filter((h) => h.pct > 0.05).slice(0, max);
   if (!top.length) return { ok: true, checked: 0, fresh: [], clusters: [], clusteredPct: 0, freshPct: 0 };
   const res = await Promise.all(top.map((h) => firstFunder(h.owner)));

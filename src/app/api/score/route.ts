@@ -10,8 +10,8 @@ export async function GET(req: Request) {
   const mint = (u.searchParams.get("mint") ?? "").trim();
   if (!isSolanaMint(mint)) return NextResponse.json({ error: "Invalid Solana mint address" }, { status: 400 });
   try {
-    const r = await scoreMint(mint, { force: u.searchParams.get("fresh") === "1" });
-    return NextResponse.json(r, { headers: { "cache-control": "s-maxage=30, stale-while-revalidate=60" } });
+    const r = await scoreMint(mint, { force: u.searchParams.get("fresh") === "1", deep: u.searchParams.get("deep") === "1", light: u.searchParams.get("light") === "1" });
+    return NextResponse.json(r, { headers: { "cache-control": r.deep ? "s-maxage=60, stale-while-revalidate=120" : "no-store" } });
   } catch (e: any) {
     return NextResponse.json({ error: String(e?.message ?? e) }, { status: 404 });
   }
