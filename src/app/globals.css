@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: dark; }
+body {
+  background: radial-gradient(1200px 600px at 10% -10%, rgba(74,222,128,.10), transparent 60%),
+    radial-gradient(900px 500px at 110% 10%, rgba(250,204,21,.07), transparent 60%), #0b0d0c;
+  color: #e7efe9;
+  min-height: 100vh;
+}
+.card { @apply rounded-2xl border border-coal-700 bg-coal-900/80 backdrop-blur; }
+.btn { @apply rounded-xl px-4 py-2 font-bold transition active:scale-95; }
+.btn-neon { @apply btn bg-pump text-coal-950 hover:bg-neon shadow-neon; }
+.btn-ghost { @apply btn border border-coal-600 hover:border-pump text-gray-200; }
+.input { @apply w-full rounded-xl border border-coal-600 bg-coal-950 px-4 py-3 font-mono text-sm outline-none focus:border-pump; }
+.scorched {
+  background: radial-gradient(circle at 30% 40%, rgba(0,0,0,.75), transparent 45%),
+    radial-gradient(circle at 75% 70%, rgba(40,15,0,.8), transparent 40%),
+    repeating-linear-gradient(115deg, rgba(251,146,60,.08) 0 6px, transparent 6px 14px);
+}
+.wallet-adapter-button-trigger { background: #4ADE80 !important; color: #0b0d0c !important; border-radius: 12px !important; height: 40px !important; font-weight: 800 !important; }
