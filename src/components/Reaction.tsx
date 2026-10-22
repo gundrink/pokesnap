@@ -1,6 +1,7 @@
 "use client";
-import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Embers, SeamArcs, buildShards, flight, hash, rng } from "./Shatter";
 import type { ScoreResult } from "@/lib/score";
 import { ipfs, pctf, scoreColor, usd } from "@/lib/format";
 
@@ -85,14 +86,18 @@ function Claws() {
 
 export default function Reaction({ r, compact = false }: { r: ScoreResult; compact?: boolean }) {
   const [run, setRun] = useState(0);
-  const [phase, setPhase] = useState<"attack" | "tear" | "ash">("attack");
+  const [phase, setPhase] = useState<Phase>("attack");
+  const reduce = useReducedMotion();
+  const seed = useMemo(() => hash(r.mint + ":" + run), [r.mint, run]);
+  const crack = useMemo(() => buildShards(seed, 2, 1).seams, [seed]);
   useEffect(() => {
     if (r.level !== "danger") return;
+    if (reduce) { setPhase("stamp"); return; }
     setPhase("attack");
-    const t1 = setTimeout(() => setPhase("tear"), compact ? 1200 : 2600);
-    const t2 = setTimeout(() => setPhase("ash"), compact ? 2600 : 4400);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, [r.mint, r.level, run, compact]);
+    const a = compact ? 1200 : 2600;
+    const ts = [setTimeout(() => setPhase("strike"), a), setTimeout(() => setPhase("shatter"), a + 450), setTimeout(() => setPhase("stamp"), a + 1500)];
+    return () => ts.forEach(clearTimeout);
+  }, [r.mint, r.level, run, compact, reduce]);
 
   const replay = (
     <button onClick={() => setRun((x) => x + 1)} className="absolute right-2 top-2 z-40 rounded-md bg-coal-950/80 px-2 py-1 text-[10px] font-bold text-gray-400 hover:text-pump">↻ replay</button>
@@ -129,13 +134,16 @@ export default function Reaction({ r, compact = false }: { r: ScoreResult; compa
 
   if (r.level === "suspicious") {
     return (
-      <motion.div key={run} className="card scorched relative overflow-hidden border-orange-500/70" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+      <motion.div key={run} className="card scorched relative overflow-hidden border-orange-500/70" initial={{ opacity: 0 }}
+        animate={reduce ? { opacity: 1 } : { opacity: 1, x: [0, -5, 5, -3, 3, 0], y: [0, 3, -3, 2, 0] }} transition={{ duration: 0.45, delay: 0.25 }}>
         {replay}
         <motion.div className="pointer-events-none absolute inset-0 z-30 bg-white" initial={{ opacity: 0 }} animate={{ opacity: [0, 0.9, 0, 0.6, 0] }} transition={{ duration: 0.6, delay: 0.25 }} />
         <motion.div className="pointer-events-none absolute -top-4 left-1/3 z-30 h-full w-16" initial={{ opacity: 0, scaleY: 0 }} animate={{ opacity: [0, 1, 1, 0], scaleY: [0, 1, 1, 1] }} transition={{ duration: 0.7, delay: 0.2 }} style={{ originY: 0 }}>
           <Bolt className="h-full w-full" />
         </motion.div>
         <Claws />
+        {!reduce && <SeamArcs seams={crack} seed={seed} dur={0.7} delay={0.3} repeat={2} />}
+        {!reduce && <Embers origins={crack[0].filter((_, k) => k % 2 === 0)} count={60} delay={300} duration={1800} />}
         <motion.div initial={{ filter: "sepia(0) brightness(1)" }} animate={{ filter: "sepia(.6) brightness(.75) contrast(1.1)" }} transition={{ delay: 0.5, duration: 0.6 }}>
           <CoinFace r={r} compact={compact} />
         </motion.div>
@@ -144,18 +152,37 @@ export default function Reaction({ r, compact = false }: { r: ScoreResult; compa
     );
   }
 
-  // DANGER: attack -> tear -> ash
-  const frags = (r.reasons.length ? r.reasons : ["Multiple critical risk factors"]).slice(0, 6);
-  const pieces = Array.from({ length: compact ? 6 : 9 }, (_, i) => i);
+  return <Danger r={r} compact={compact} run={run} replay={replay} phase={phase} reduce={!!reduce} seed={seed} />;
+}
+
+type Phase = "attack" | "strike" | "shatter" | "stamp";
+
+function Danger({ r, compact, run, replay, phase, reduce, seed }: { r: ScoreResult; compact: boolean; run: number; replay: React.ReactNode; phase: Phase; reduce: boolean; seed: number }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [sz, setSz] = useState({ w: 600, h: 440 });
+  useLayoutEffect(() => { if (box.current) setSz({ w: box.current.offsetWidth, h: box.current.offsetHeight }); }, [run]);
+  const { shards, seams } = useMemo(() => buildShards(seed, compact ? 3 : 5, compact ? 2 : 4), [seed, compact]);
+  const flights = useMemo(() => { const rr = rng(seed ^ 0x51ed); return shards.map((s) => flight(s, rr, sz.w, sz.h)); }, [shards, seed, sz]);
+  const origins = useMemo(() => seams.flatMap((s) => [s[Math.floor(s.length / 2)]]), [seams]);
+  const flew = phase === "shatter" || phase === "stamp";
+  const face = (
+    <div className="absolute inset-0 rounded-2xl bg-coal-900">
+      <CoinFace r={r} compact={compact} />
+      <div className="px-4 text-[11px] leading-snug text-red-300/90">{r.reasons.slice(0, 4).map((x) => <div key={x}>✖ {x}</div>)}</div>
+    </div>
+  );
   return (
-    <div key={run} className={`card relative overflow-hidden border-red-500/70 shadow-danger ${compact ? "min-h-[230px]" : "min-h-[440px]"}`}>
+    <motion.div key={run} ref={box}
+      className={`card relative border-red-500/70 shadow-danger ${flew ? "overflow-visible" : "overflow-hidden"} ${compact ? "min-h-[230px]" : "min-h-[440px]"}`}
+      animate={phase === "strike" ? { x: [0, -14, 12, -10, 9, -6, 4, 0], y: [0, 8, -9, 6, -5, 3, 0], rotate: [0, -1.2, 1, -0.8, 0.5, 0] }
+        : phase === "stamp" && !reduce ? { x: [0, 0, -6, 5, -3, 0], y: [0, 0, 7, -4, 2, 0] } : { x: 0, y: 0 }}
+      transition={phase === "stamp" ? { duration: 0.5, delay: 0.12 } : { duration: 0.45 }}
+      style={{ willChange: "transform" }}>
       {replay}
-      <AnimatePresence mode="wait">
+      <AnimatePresence>
         {phase === "attack" && (
-          <motion.div key="attack" className="absolute inset-0" exit={{ opacity: 0 }}>
-            <motion.div className="absolute inset-0 opacity-60" animate={{ x: [0, -8, 8, -8, 8, 0] }} transition={{ duration: 0.5, repeat: Infinity }}>
-              <CoinFace r={r} compact={compact} />
-            </motion.div>
+          <motion.div key="attack" className="absolute inset-0 overflow-hidden rounded-2xl" exit={{ opacity: 0, transition: { duration: 0.15 } }}>
+            <motion.div className="absolute inset-0 opacity-60" animate={{ x: [0, -8, 8, -8, 8, 0] }} transition={{ duration: 0.5, repeat: Infinity }}>{face}</motion.div>
             {compact ? (
               <motion.img src="/mascot-attack.jpg" className="absolute inset-0 z-20 h-full w-full object-cover" initial={{ scale: 1.5, opacity: 0 }} animate={{ scale: 1, opacity: 0.95 }} transition={{ duration: 0.35 }} alt="" />
             ) : (
@@ -165,38 +192,63 @@ export default function Reaction({ r, compact = false }: { r: ScoreResult; compa
             <motion.div className="pointer-events-none absolute inset-0 z-30 bg-volt mix-blend-screen" animate={{ opacity: [0, 0.7, 0, 0.5, 0] }} transition={{ duration: 0.5, repeat: Infinity, repeatDelay: 0.6 }} />
           </motion.div>
         )}
-        {phase !== "attack" && (
-          <motion.div key="rip" className="absolute inset-0 grid grid-cols-3 gap-1 p-2">
-            {pieces.map((i) => {
-              const ang = (i / pieces.length) * Math.PI * 2 + 0.4;
-              const ash = phase === "ash";
-              return (
-                <motion.div key={i} className="scorched flex items-center justify-center rounded-lg border border-red-900/70 bg-coal-800 p-2 text-center text-[10px] font-semibold leading-tight text-red-200"
-                  initial={{ x: 0, y: 0, rotate: 0, opacity: 1 }}
-                  animate={ash
-                    ? { x: Math.cos(ang) * 60, y: 70 + (i % 3) * 18, rotate: (i % 2 ? 1 : -1) * 70, opacity: 0.6, scale: 0.7, filter: "grayscale(.85) brightness(.7)" }
-                    : { x: Math.cos(ang) * 26, y: Math.sin(ang) * 22, rotate: (i % 2 ? 1 : -1) * (8 + i * 2), opacity: 1 }}
-                  transition={{ duration: ash ? 1.2 : 0.4, ease: ash ? "easeIn" : "backOut" }}
-                  style={{ clipPath: `polygon(${i % 3 ? 6 : 0}% 0, 100% ${i % 2 ? 8 : 0}%, ${i % 2 ? 92 : 100}% 100%, 0 ${i % 3 ? 94 : 100}%)` }}>
-                  {frags[i % frags.length]}
-                </motion.div>
-              );
-            })}
-            {phase === "ash" && (
-              <>
-                <motion.div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-gray-600/40 to-transparent" initial={{ opacity: 0 }} animate={{ opacity: 1 }} />
-                <motion.div className="absolute inset-0 z-30 flex flex-col items-center justify-center" initial={{ scale: 3, opacity: 0, rotate: -25 }} animate={{ scale: 1, opacity: 1, rotate: -12 }} transition={{ type: "spring", stiffness: 260, damping: 14 }}>
-                  <div className={`rounded-lg border-4 border-red-500 px-5 py-1 font-black tracking-[0.25em] text-red-500 ${compact ? "text-3xl" : "text-6xl"}`} style={{ textShadow: "0 0 20px #EF4444" }}>ZAPPED</div>
-                  <div className="mt-3 rotate-12 rounded bg-coal-950/90 px-3 py-1 text-center">
-                    <div className="font-black">{r.name} <span className="text-pump">${r.symbol}</span></div>
-                    <div className="text-sm text-red-400">score {r.score}/100</div>
-                  </div>
-                </motion.div>
-              </>
-            )}
-          </motion.div>
-        )}
       </AnimatePresence>
-    </div>
+
+      {phase !== "attack" && (
+        <>
+          {/* shards: full card face clipped into jagged polygons, charred rim, ballistic flight */}
+          {shards.map((s, i) => {
+            const f = flights[i];
+            const clip = `polygon(${s.poly.map((p) => `${p[0].toFixed(2)}% ${p[1].toFixed(2)}%`).join(",")})`;
+            return (
+              <motion.div key={i} className="pointer-events-none absolute inset-0 z-20"
+                style={{ transformOrigin: `${s.cx}% ${s.cy}%`, willChange: "transform, opacity" }}
+                initial={{ x: 0, y: 0, rotate: 0, rotateX: 0, opacity: 1 }}
+                animate={flew && !reduce ? { x: f.x, y: f.y, rotate: f.rot, rotateX: f.rx, opacity: f.op } : phase === "strike" ? { x: (s.cx - 50) * 0.08, y: (s.cy - 50) * 0.08, scale: 1.01 } : { opacity: 0.25 }}
+                transition={flew && !reduce ? { duration: f.T, times: f.times, ease: "linear" } : { duration: 0.2 }}>
+                <div className="absolute inset-0" style={{ clipPath: clip, WebkitClipPath: clip }}>
+                  {face}
+                  <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                    <polygon points={s.poly.map((p) => p.join(",")).join(" ")} fill="none" stroke="#120600" strokeWidth={14} vectorEffect="non-scaling-stroke" strokeLinejoin="round" opacity={0.95} />
+                    <polygon points={s.poly.map((p) => p.join(",")).join(" ")} fill="none" stroke="#ff6a1f" strokeWidth={3} vectorEffect="non-scaling-stroke" strokeLinejoin="round" opacity={0.9} />
+                  </svg>
+                  <motion.div className="absolute inset-0" initial={{ opacity: 0 }} animate={{ opacity: flew ? 0.55 : 0.2 }} transition={{ duration: 0.8 }}
+                    style={{ background: "radial-gradient(circle at 50% 50%, transparent 30%, #1a0a00cc 100%)" }} />
+                </div>
+              </motion.div>
+            );
+          })}
+          {!reduce && <SeamArcs seams={seams} seed={seed} dur={phase === "strike" ? 0.45 : 0.6} />}
+          {/* lightning bolt + white flash */}
+          {!reduce && (
+            <>
+              <motion.div className="pointer-events-none absolute -top-6 left-[38%] z-40 h-[110%] w-24" initial={{ opacity: 0, scaleY: 0 }} animate={{ opacity: [0, 1, 1, 0], scaleY: [0, 1, 1, 1] }} transition={{ duration: 0.5 }} style={{ originY: 0 }}>
+                <Bolt className="h-full w-full" />
+              </motion.div>
+              <motion.div className="pointer-events-none fixed inset-0 z-[60] bg-white" initial={{ opacity: 0 }} animate={{ opacity: [0, 0.95, 0, 0.6, 0] }} transition={{ duration: 0.45, times: [0, 0.08, 0.3, 0.42, 1] }} />
+              <motion.div className="pointer-events-none absolute inset-0 z-10 rounded-2xl" initial={{ opacity: 0 }} animate={{ opacity: [0, 1, 0.4] }} transition={{ duration: 0.6 }}
+                style={{ background: "radial-gradient(circle at 50% 50%, #00ff8855, #FACC1522 40%, transparent 70%)" }} />
+              <Embers origins={origins} count={compact ? 90 : 220} delay={350} duration={3000} />
+            </>
+          )}
+          {/* scorched void where card was */}
+          <motion.div className="absolute inset-0 z-0 rounded-2xl" initial={{ opacity: 0 }} animate={{ opacity: flew ? 1 : 0 }} transition={{ duration: 0.6 }}
+            style={{ background: "radial-gradient(ellipse at 50% 60%, #2a0d05 0%, #0b0d0c 70%)", boxShadow: "inset 0 0 60px #ff3b1f55" }} />
+          {phase === "stamp" && (
+            <motion.div className="absolute inset-0 z-50 flex flex-col items-center justify-center"
+              initial={reduce ? { opacity: 1, rotate: -12 } : { scale: 4, opacity: 0, rotate: -30 }} animate={{ scale: 1, opacity: 1, rotate: -12 }}
+              transition={{ type: "spring", stiffness: 520, damping: 18, mass: 0.9 }}>
+              {!reduce && <motion.div className="absolute h-40 w-40 rounded-full border-4 border-red-500" initial={{ scale: 0.4, opacity: 0.9 }} animate={{ scale: 3.2, opacity: 0 }} transition={{ duration: 0.7, delay: 0.12 }} />}
+              <div className={`relative rounded-lg border-[6px] border-red-500 bg-coal-950/70 px-6 py-1 font-black tracking-[0.25em] text-red-500 ${compact ? "text-3xl" : "text-7xl"}`}
+                style={{ textShadow: "0 0 24px #EF4444, 0 0 4px #fff", boxShadow: "0 0 40px #EF444488, inset 0 0 20px #EF444455", maskImage: "radial-gradient(circle at 30% 40%, #000 60%, #000a 75%, #000 90%)" }}>ZAPPED</div>
+              <div className="mt-4 rotate-12 rounded bg-coal-950/90 px-3 py-1 text-center">
+                <div className="font-black">{r.name} <span className="text-pump">${r.symbol}</span></div>
+                <div className="text-sm text-red-400">score {r.score}/100</div>
+              </div>
+            </motion.div>
+          )}
+        </>
+      )}
+    </motion.div>
   );
 }
