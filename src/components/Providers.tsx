@@ -11,6 +11,7 @@ export const REOWN_PROJECT_ID = process.env.NEXT_PUBLIC_REOWN_PROJECT_ID || "";
 let appKitReady = false;
 if (typeof window !== "undefined" && REOWN_PROJECT_ID && !appKitReady) {
   appKitReady = true;
+  // `basic` is a supported runtime option but omitted from the public CreateAppKit type.
   createAppKit({
     adapters: [new SolanaAdapter()],
     networks: [solana],
@@ -24,8 +25,11 @@ if (typeof window !== "undefined" && REOWN_PROJECT_ID && !appKitReady) {
     },
     themeMode: "dark",
     themeVariables: { "--w3m-accent": "#4ADE80", "--w3m-border-radius-master": "3px" },
-    features: { analytics: false, email: false, socials: false },
-  });
+    // basic:true skips the remote dashboard config (which otherwise overrides local email/social flags).
+    basic: true,
+    enableWalletConnect: true,
+    features: { analytics: false, email: false, socials: false, emailShowWallets: false, onramp: false, swaps: false },
+  } as Parameters<typeof createAppKit>[0]);
 }
 export const appKitEnabled = () => appKitReady;
 
