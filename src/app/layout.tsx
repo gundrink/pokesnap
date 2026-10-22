@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Providers from "@/components/Providers";
 import Nav from "@/components/Nav";
+import { XLink, CAPill } from "@/components/Social";
 
 export const metadata: Metadata = {
   title: "PokeSnap ⚡ — sniff out pump.fun rugs",
@@ -18,6 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Nav />
           <main className="page-enter mx-auto max-w-7xl px-4 py-6">{children}</main>
           <footer className="mx-auto max-w-7xl px-4 pb-8 pt-4 text-xs text-gray-600">
+            <div className="mb-3 flex flex-wrap items-center gap-2"><XLink /><CAPill /></div>
             PokeSnap is a fan-made risk viewer. Scores are heuristics from public data (pump.fun, DexScreener, RugCheck, Solana RPC) — not financial advice. Zaps are visual only.
           </footer>
           </div>

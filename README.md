@@ -21,6 +21,9 @@ Node 18.18+ (tested on Node 20).
 | `NEXT_PUBLIC_SOLANA_RPC_URL` | public mainnet | Wallet adapter connection |
 | `NEXT_PUBLIC_POKESNAP_MINT` | empty | $PokeSnap mint. Enables tiers, Self Score, Burn Tracker |
 | `NEXT_PUBLIC_UNLOCK_ALL` | `true` | Bypass tier gating (pre-launch) |
+| `NEXT_PUBLIC_REOWN_PROJECT_ID` | — | Reown AppKit project id (wallet connect) |
+| `NEXT_PUBLIC_X_URL` | `https://x.com` | X profile linked in navbar/footer |
+| `NEXT_PUBLIC_CA` | — | Contract address shown as copyable `CA:` pill (hidden if empty) |
 | `OPENAI_API_KEY` / `OPENAI_MODEL` | empty / gpt-4o-mini | Enables LLM mode for Ask PokeSnap (tool calls into score engine) |
 
 ## Features / Fitur
@@ -34,7 +37,7 @@ Node 18.18+ (tested on Node 20).
 | `/watch` Dev Watch (Hunter+) | localStorage watchlist, re-scored on view, flags dev balance drops |
 | `/self` Self Score, `/burn` Burn Tracker | shown only when `NEXT_PUBLIC_POKESNAP_MINT` is set |
 
-Wallets: Phantom, Solflare. Tiers by $PokeSnap balance: Free 0 · Scout 100k · Hunter 500k · Alpha 2M.
+Wallets: Reown AppKit (Phantom, Solflare, Backpack, WalletConnect…). Tiers by $PokeSnap balance: Free 0 · Scout 100k · Hunter 500k · Alpha 2M.
 
 ## Score engine (`src/lib/score.ts`)
 | Factor | Weight | Rule |

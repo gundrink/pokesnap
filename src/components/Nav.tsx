@@ -2,10 +2,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import dynamic from "next/dynamic";
+import { XLink, CAPill } from "./Social";
 import { useTier } from "./Providers";
 import { POKESNAP_MINT } from "@/lib/tiers";
 
-const WalletMultiButton = dynamic(() => import("@solana/wallet-adapter-react-ui").then((m) => m.WalletMultiButton), { ssr: false });
+const ConnectButton = dynamic(() => import("./ConnectButton"), { ssr: false, loading: () => <span className="inline-block h-10 w-[120px] rounded-xl bg-pump/40" /> });
 
 const LINKS = [
   ["/", "Snap Scanner"],
@@ -44,7 +45,9 @@ export default function Nav() {
             {loading ? "…" : tier}
             {unlockAll && " · unlocked"}
           </span>
-          <WalletMultiButton />
+          <CAPill />
+          <XLink />
+          <ConnectButton />
         </div>
       </div>
     </header>

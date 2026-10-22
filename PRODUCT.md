@@ -35,7 +35,7 @@ All of these effects are **purely visual on the website**. No on-chain transacti
 | `/watch` **Dev Watch** | A localStorage watchlist that is re-scored on every visit and flags when a dev's balance drops | Hunter+ |
 | `/self` **Self Score** | PokeSnap scores the $PokeSnap token itself | Shown when `NEXT_PUBLIC_POKESNAP_MINT` is set |
 | `/burn` **Burn Tracker** | Initial supply, current supply (from RPC), amount burned, and burn percentage | Shown when `NEXT_PUBLIC_POKESNAP_MINT` is set |
-| **Wallet** | Phantom and Solflare via the Solana wallet adapter. $PokeSnap balance is read from `/api/balance` | — |
+| **Wallet** | Reown AppKit (Solana adapter): Phantom, Solflare, Backpack, WalletConnect and more. $PokeSnap balance is read from `/api/balance` | — |
 
 ## 5. Score Engine (`src/lib/score.ts`, `src/lib/launch.ts`)
 **Formula:** score = (total factor points / total factor weight) × 100, then hard caps are applied.
@@ -90,7 +90,7 @@ Gating is enforced by the `Gate` component. When `NEXT_PUBLIC_UNLOCK_ALL=true` (
 
 ## 8. Architecture & Tech Stack
 - **Next.js (App Router) + TypeScript**, Tailwind CSS, and Framer Motion for animation.
-- **Solana wallet adapter** for Phantom and Solflare.
+- **Reown AppKit** (`@reown/appkit` + `@reown/appkit-adapter-solana`) for wallet connect.
 - **Server-side API routes** act as a proxy and aggregator for data sources (`src/lib/sources.ts`, `fetcher.ts` with TTL caching and timeouts).
 - **Storage:** a local JSON file for the Hall of Shame (`src/lib/store.ts`) and localStorage for the watchlist.
 
@@ -113,6 +113,9 @@ Gating is enforced by the `Gate` component. When `NEXT_PUBLIC_UNLOCK_ALL=true` (
 | `NEXT_PUBLIC_SOLANA_RPC_URL` | Public mainnet | RPC for the wallet adapter |
 | `NEXT_PUBLIC_POKESNAP_MINT` | Empty | $PokeSnap mint. Enables tiers, Self Score, and Burn Tracker |
 | `NEXT_PUBLIC_UNLOCK_ALL` | `true` | Unlocks every feature (bypasses gating) |
+| `NEXT_PUBLIC_REOWN_PROJECT_ID` | — | Reown AppKit project id (wallet connect) |
+| `NEXT_PUBLIC_X_URL` | `https://x.com` | X profile linked in navbar/footer |
+| `NEXT_PUBLIC_CA` | — | Contract address shown as copyable `CA:` pill (hidden if empty) |
 | `OPENAI_API_KEY` / `OPENAI_MODEL` | Empty / `gpt-4o-mini` | LLM mode for Ask PokeSnap |
 
 ## 11. Getting Started

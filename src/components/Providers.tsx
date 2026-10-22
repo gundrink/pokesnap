@@ -1,50 +1,71 @@
 "use client";
-import { ConnectionProvider, WalletProvider, useWallet } from "@solana/wallet-adapter-react";
-import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
-import { PhantomWalletAdapter } from "@solana/wallet-adapter-phantom";
-import { SolflareWalletAdapter } from "@solana/wallet-adapter-solflare";
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createAppKit, useAppKitAccount } from "@reown/appkit/react";
+import { SolanaAdapter } from "@reown/appkit-adapter-solana/react";
+import { solana } from "@reown/appkit/networks";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { tierFor, UNLOCK_ALL, POKESNAP_MINT, type TierName } from "@/lib/tiers";
-import "@solana/wallet-adapter-react-ui/styles.css";
 import { MotionConfig } from "framer-motion";
 
-type TierCtx = { balance: number; tier: TierName; loading: boolean; unlockAll: boolean; mintConfigured: boolean; error?: string };
+export const REOWN_PROJECT_ID = process.env.NEXT_PUBLIC_REOWN_PROJECT_ID || "";
+
+let appKitReady = false;
+if (typeof window !== "undefined" && REOWN_PROJECT_ID && !appKitReady) {
+  appKitReady = true;
+  createAppKit({
+    adapters: [new SolanaAdapter()],
+    networks: [solana],
+    defaultNetwork: solana,
+    projectId: REOWN_PROJECT_ID,
+    metadata: {
+      name: "PokeSnap",
+      description: "Electric critter that scores pump.fun tokens and zaps the bad ones.",
+      url: window.location.origin,
+      icons: [`${window.location.origin}/mascot-calm.webp`],
+    },
+    themeMode: "dark",
+    themeVariables: { "--w3m-accent": "#4ADE80", "--w3m-border-radius-master": "3px" },
+    features: { analytics: false, email: false, socials: false },
+  });
+}
+export const appKitEnabled = () => appKitReady;
+
+type TierCtx = { balance: number; tier: TierName; loading: boolean; unlockAll: boolean; mintConfigured: boolean; address?: string; error?: string };
 const Ctx = createContext<TierCtx>({ balance: 0, tier: "Free", loading: false, unlockAll: UNLOCK_ALL, mintConfigured: !!POKESNAP_MINT });
 export const useTier = () => useContext(Ctx);
 
+function useSolAddress(): string | undefined {
+  // Hooks are safe only once createAppKit ran; guard keeps the app working without a project id.
+  if (!REOWN_PROJECT_ID) return undefined;
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const { address, isConnected } = useAppKitAccount({ namespace: "solana" });
+  return isConnected ? address : undefined;
+}
+
 function TierProvider({ children }: { children: ReactNode }) {
-  const { publicKey } = useWallet();
+  const address = useSolAddress();
   const [state, setState] = useState<TierCtx>({ balance: 0, tier: "Free", loading: false, unlockAll: UNLOCK_ALL, mintConfigured: !!POKESNAP_MINT });
   useEffect(() => {
-    if (!publicKey || !POKESNAP_MINT) {
-      setState((s) => ({ ...s, balance: 0, tier: "Free", loading: false }));
+    if (!address || !POKESNAP_MINT) {
+      setState((s) => ({ ...s, address, balance: 0, tier: "Free", loading: false }));
       return;
     }
     let dead = false;
-    setState((s) => ({ ...s, loading: true }));
-    fetch(`/api/balance?owner=${publicKey.toBase58()}`)
+    setState((s) => ({ ...s, address, loading: true }));
+    fetch(`/api/balance?owner=${address}`)
       .then((r) => r.json())
       .then((j) => !dead && setState((s) => ({ ...s, loading: false, balance: j.balance ?? 0, tier: tierFor(j.balance ?? 0), error: j.error })))
       .catch((e) => !dead && setState((s) => ({ ...s, loading: false, error: String(e) })));
     return () => {
       dead = true;
     };
-  }, [publicKey]);
+  }, [address]);
   return <Ctx.Provider value={state}>{children}</Ctx.Provider>;
 }
 
 export default function Providers({ children }: { children: ReactNode }) {
-  const endpoint = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
-  const wallets = useMemo(() => [new PhantomWalletAdapter(), new SolflareWalletAdapter()], []);
   return (
     <MotionConfig reducedMotion="user">
-    <ConnectionProvider endpoint={endpoint}>
-      <WalletProvider wallets={wallets} autoConnect>
-        <WalletModalProvider>
-          <TierProvider>{children}</TierProvider>
-        </WalletModalProvider>
-      </WalletProvider>
-    </ConnectionProvider>
+      <TierProvider>{children}</TierProvider>
     </MotionConfig>
   );
 }

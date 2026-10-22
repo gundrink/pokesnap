@@ -19,7 +19,6 @@ body {
     radial-gradient(circle at 75% 70%, rgba(40,15,0,.8), transparent 40%),
     repeating-linear-gradient(115deg, rgba(251,146,60,.08) 0 6px, transparent 6px 14px);
 }
-.wallet-adapter-button-trigger { background: #4ADE80 !important; color: #0b0d0c !important; border-radius: 12px !important; height: 40px !important; font-weight: 800 !important; }
 
 @keyframes page-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 .page-enter { animation: page-enter 520ms cubic-bezier(.25,.1,.25,1) both; }
