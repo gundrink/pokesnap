@@ -1,7 +1,7 @@
 "use client";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Embers, SeamArcs, buildShards, flight, hash, rng } from "./Shatter";
+import { Embers, SeamArcs, buildShards, crackLine, flight, hash, rng } from "./Shatter";
 import type { ScoreResult } from "@/lib/score";
 import { ipfs, pctf, scoreColor, usd } from "@/lib/format";
 
@@ -72,18 +72,6 @@ function Sparks({ n = 10, color = "#FACC15" }: { n?: number; color?: string }) {
   );
 }
 
-function Claws() {
-  return (
-    <svg className="pointer-events-none absolute inset-0 z-20 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-      {[0, 9, 18].map((o, i) => (
-        <motion.path key={i} d={`M${55 + o} 5 Q ${45 + o} 50 ${30 + o} 95`} stroke="#1a0a00" strokeWidth="2.2" fill="none" strokeLinecap="round"
-          initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ delay: 0.5 + i * 0.12, duration: 0.25 }}
-          style={{ filter: "drop-shadow(0 0 2px #FB923C)" }} />
-      ))}
-    </svg>
-  );
-}
-
 export default function Reaction({ r, compact = false }: { r: ScoreResult; compact?: boolean }) {
   const [run, setRun] = useState(0);
   const [phase, setPhase] = useState<Phase>("attack");
@@ -132,25 +120,7 @@ export default function Reaction({ r, compact = false }: { r: ScoreResult; compa
     );
   }
 
-  if (r.level === "suspicious") {
-    return (
-      <motion.div key={run} className="card scorched relative overflow-hidden border-orange-500/70" initial={{ opacity: 0 }}
-        animate={reduce ? { opacity: 1 } : { opacity: 1, x: [0, -5, 5, -3, 3, 0], y: [0, 3, -3, 2, 0] }} transition={{ duration: 0.45, delay: 0.25 }}>
-        {replay}
-        <motion.div className="pointer-events-none absolute inset-0 z-30 bg-white" initial={{ opacity: 0 }} animate={{ opacity: [0, 0.9, 0, 0.6, 0] }} transition={{ duration: 0.6, delay: 0.25 }} />
-        <motion.div className="pointer-events-none absolute -top-4 left-1/3 z-30 h-full w-16" initial={{ opacity: 0, scaleY: 0 }} animate={{ opacity: [0, 1, 1, 0], scaleY: [0, 1, 1, 1] }} transition={{ duration: 0.7, delay: 0.2 }} style={{ originY: 0 }}>
-          <Bolt className="h-full w-full" />
-        </motion.div>
-        <Claws />
-        {!reduce && <SeamArcs seams={crack} seed={seed} dur={0.7} delay={0.3} repeat={2} />}
-        {!reduce && <Embers origins={crack[0].filter((_, k) => k % 2 === 0)} count={60} delay={300} duration={1800} />}
-        <motion.div initial={{ filter: "sepia(0) brightness(1)" }} animate={{ filter: "sepia(.6) brightness(.75) contrast(1.1)" }} transition={{ delay: 0.5, duration: 0.6 }}>
-          <CoinFace r={r} compact={compact} />
-        </motion.div>
-        <div className="relative z-10 px-4 pb-3 text-xs text-orange-400">⚡ Struck by lightning & clawed. Suspicious patterns found.</div>
-      </motion.div>
-    );
-  }
+  if (r.level === "suspicious") return <Suspicious r={r} compact={compact} run={run} replay={replay} reduce={!!reduce} seed={seed} />;
 
   return <Danger r={r} compact={compact} run={run} replay={replay} phase={phase} reduce={!!reduce} seed={seed} />;
 }
@@ -248,6 +218,94 @@ function Danger({ r, compact, run, replay, phase, reduce, seed }: { r: ScoreResu
             </motion.div>
           )}
         </>
+      )}
+    </motion.div>
+  );
+}
+
+type SPhase = "hit" | "crack" | "split" | "stamp";
+
+function Suspicious({ r, compact, run, replay, reduce, seed }: { r: ScoreResult; compact: boolean; run: number; replay: React.ReactNode; reduce: boolean; seed: number }) {
+  const [ph, setPh] = useState<SPhase>(reduce ? "stamp" : "hit");
+  useEffect(() => {
+    if (reduce) { setPh("stamp"); return; }
+    setPh("hit");
+    const ts = [setTimeout(() => setPh("crack"), 350), setTimeout(() => setPh("split"), 1150), setTimeout(() => setPh("stamp"), 1900)];
+    return () => ts.forEach(clearTimeout);
+  }, [run, reduce, r.mint]);
+  const line = useMemo(() => crackLine(seed), [seed]);
+  const pts = line.map((p) => `${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(" ");
+  const leftPoly = [[0, 0], ...line, [0, 100]] as [number, number][];
+  const rightPoly = [...line, [100, 100], [100, 0]] as [number, number][];
+  const clip = (P: [number, number][]) => `polygon(${P.map((p) => `${p[0].toFixed(2)}% ${p[1].toFixed(2)}%`).join(",")})`;
+  const split = ph === "split" || ph === "stamp";
+  const cracked = ph !== "hit";
+  const face = (
+    <div className="absolute inset-0 rounded-2xl border border-orange-500/70 bg-coal-900" style={{ filter: cracked ? "sepia(.55) brightness(.78) contrast(1.1)" : undefined }}>
+      <CoinFace r={r} compact={compact} />
+      <div className="relative z-10 px-4 pb-3 text-xs text-orange-400">⚡ Struck by lightning & snapped in two. Suspicious patterns found.</div>
+    </div>
+  );
+  const edge = (
+    <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+      <polyline points={pts} fill="none" stroke="#120600" strokeWidth={16} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+      <motion.polyline points={pts} fill="none" stroke="#ff6a1f" strokeWidth={4} vectorEffect="non-scaling-stroke" strokeLinejoin="round"
+        style={{ filter: "drop-shadow(0 0 4px #ff6a1f) drop-shadow(0 0 10px #FACC15)" }}
+        animate={reduce ? { opacity: 0.9 } : { opacity: [0.6, 1, 0.7, 1] }} transition={{ duration: 1.6, repeat: Infinity }} />
+    </svg>
+  );
+  const half = (P: [number, number][], tgt: { x: number; y: number; rotate: number }, origin: string) => (
+    <motion.div className="pointer-events-none absolute inset-0 z-20" style={{ transformOrigin: origin, willChange: "transform" }}
+      initial={reduce ? tgt : { x: 0, y: 0, rotate: 0 }}
+      animate={split ? tgt : ph === "crack" ? { x: tgt.x * 0.08, y: 0, rotate: 0 } : { x: 0, y: 0, rotate: 0 }}
+      transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 140, damping: 11, mass: 1.1 }}>
+      <div className="absolute inset-0" style={{ clipPath: clip(P), WebkitClipPath: clip(P) }}>
+        {face}
+        {cracked && edge}
+      </div>
+    </motion.div>
+  );
+  const gap = compact ? 10 : 22;
+  return (
+    <motion.div key={run} className={`card relative border-transparent bg-transparent ${split ? "overflow-visible mb-4" : "overflow-hidden"}`}
+      initial={{ opacity: 0 }}
+      animate={reduce ? { opacity: 1 } : ph === "hit" ? { opacity: 1, x: [0, -5, 5, -3, 3, 0], y: [0, 3, -3, 2, 0] } : ph === "stamp" ? { opacity: 1, x: [0, -5, 4, -2, 0], y: [0, 6, -3, 1, 0] } : { opacity: 1, x: 0, y: 0 }}
+      transition={{ duration: 0.45 }} style={{ boxShadow: "none" }}>
+      {replay}
+      {/* layout sizer */}
+      <div className="invisible"><CoinFace r={r} compact={compact} /><div className="px-4 pb-3 text-xs">.</div></div>
+      {/* scorched gap behind the break */}
+      <motion.div className="absolute inset-0 z-0 rounded-2xl" initial={{ opacity: reduce ? 1 : 0 }} animate={{ opacity: split ? 1 : 0 }} transition={{ duration: 0.5 }}
+        style={{ background: "radial-gradient(ellipse at 50% 55%, #3a1205 0%, #0b0d0c 65%)", boxShadow: "inset 0 0 50px #ff3b1f66" }} />
+      {half(leftPoly, { x: -gap * 0.6, y: gap * 0.35, rotate: -4 }, `${line[line.length - 1][0]}% 100%`)}
+      {half(rightPoly, { x: gap * 0.6, y: gap * 0.15, rotate: 3.5 }, `${line[line.length - 1][0]}% 100%`)}
+      {!reduce && (
+        <>
+          <motion.div className="pointer-events-none fixed inset-0 z-[60] bg-white" initial={{ opacity: 0 }} animate={{ opacity: [0, 0.9, 0, 0.55, 0] }} transition={{ duration: 0.5, delay: 0.1 }} />
+          <motion.div className="pointer-events-none absolute -top-6 z-40 h-[110%] w-20" style={{ left: `${line[0][0] - 6}%`, originY: 0 }} initial={{ opacity: 0, scaleY: 0 }}
+            animate={{ opacity: [0, 1, 1, 0], scaleY: [0, 1, 1, 1] }} transition={{ duration: 0.6, delay: 0.05 }}>
+            <Bolt className="h-full w-full" />
+          </motion.div>
+          {cracked && (
+            <svg className="pointer-events-none absolute inset-0 z-30 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+              <motion.polyline points={pts} fill="none" stroke="#fff" strokeWidth={3} vectorEffect="non-scaling-stroke" strokeLinejoin="round"
+                style={{ filter: "drop-shadow(0 0 6px #FACC15) drop-shadow(0 0 12px #00ff88)" }}
+                initial={{ pathLength: 0, opacity: 1 }} animate={{ pathLength: 1, opacity: split ? 0 : 1 }} transition={{ pathLength: { duration: 0.35 }, opacity: { duration: 0.2 } }} />
+            </svg>
+          )}
+          {cracked && <SeamArcs seams={[line]} seed={seed} dur={0.7} delay={0.1} repeat={1} />}
+          {cracked && <Embers origins={line} count={compact ? 50 : 110} delay={150} duration={2200} />}
+          {split && <Sparks n={compact ? 6 : 12} color="#FB923C" />}
+        </>
+      )}
+      {ph === "stamp" && (
+        <motion.div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center"
+          initial={reduce ? { opacity: 1, rotate: -12 } : { scale: 4, opacity: 0, rotate: -30 }} animate={{ scale: 1, opacity: 1, rotate: -12 }}
+          transition={{ type: "spring", stiffness: 520, damping: 18, mass: 0.9 }}>
+          {!reduce && <motion.div className="absolute h-32 w-32 rounded-full border-4 border-orange-500" initial={{ scale: 0.4, opacity: 0.9 }} animate={{ scale: 3, opacity: 0 }} transition={{ duration: 0.7, delay: 0.1 }} />}
+          <div className={`relative rounded-lg border-[6px] border-orange-500 bg-coal-950/75 px-4 py-0.5 font-black tracking-[0.25em] text-orange-500 ${compact ? "text-2xl" : "text-5xl"}`}
+            style={{ textShadow: "0 0 22px #FB923C, 0 0 4px #fff", boxShadow: "0 0 36px #FB923C88, inset 0 0 18px #FB923C55" }}>ZAPPED</div>
+        </motion.div>
       )}
     </motion.div>
   );

@@ -117,3 +117,10 @@ export function Embers({ origins, count = 140, delay = 0, duration = 2600 }: { o
   }, [origins, count, delay, duration]);
   return <canvas ref={ref} className="pointer-events-none absolute inset-0 z-40 h-full w-full" />;
 }
+
+/** single jagged diagonal break from top edge to bottom edge (% coords) */
+export function crackLine(seed: number): P[] {
+  const r = rng(seed ^ 0xc4ac);
+  const a: P = [55 + r() * 12, 0], b: P = [32 + r() * 12, 100];
+  return [a, ...jag(a, b, r, 9, 4.5), b];
+}
