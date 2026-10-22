@@ -26,7 +26,7 @@ export default function Nav() {
     <header className="sticky top-0 z-40 border-b border-coal-700 bg-coal-950/85 backdrop-blur">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-3">
         <Link href="/" className="flex items-center gap-2">
-          <img src="/mascot-calm.jpg" alt="PokeSnap" className="h-9 w-9 rounded-full object-cover ring-2 ring-pump" />
+          <img src="/mascot-calm.webp" alt="PokeSnap" className="h-9 w-9 object-contain drop-shadow" />
           <span className="text-xl font-black tracking-tight">
             Poke<span className="text-pump">Snap</span>
             <span className="text-volt">⚡</span>

@@ -1,4 +1,5 @@
 "use client";
+import HeroMascot from "@/components/HeroMascot";
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
@@ -44,7 +45,7 @@ function Scanner() {
             {EXAMPLES.map(([n, m]) => <button key={m} className="text-pump hover:underline" onClick={() => { setMint(m); go(m); }}>{n}</button>)}
           </div>
         </div>
-        <motion.img src="/mascot-calm.jpg" alt="" className="hidden h-44 w-44 rounded-3xl object-cover shadow-neon md:block" animate={{ y: [0, -6, 0] }} transition={{ duration: 3, repeat: Infinity }} />
+        <HeroMascot mood={loading ? "scan" : data ? (data.score < 25 ? "angry" : data.score >= 70 ? "happy" : "idle") : "idle"} />
       </section>
 
       {loading && (
