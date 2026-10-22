@@ -1,146 +1,146 @@
-# PokeSnap ⚡ — Dokumen Produk
+# PokeSnap ⚡ — Product Document
 
 > **"Smells off? Gets zapped."**
 
-## 1. Ringkasan Produk
-PokeSnap adalah dApp di Solana yang memberi **skor risiko 0–100** (semakin tinggi semakin aman) untuk token pump.fun atau token Solana mana pun. Datanya diambil live dari pump.fun, DexScreener, RugCheck, dan Solana RPC, dan setiap poin skor disertai bukti. Koin yang skornya jelek "diserang" oleh maskot PokeSnap **secara visual**. Utilitasnya terhubung ke token **$PokeSnap**: jumlah token yang dipegang menentukan tier akses fitur.
+## 1. Product Overview
+PokeSnap is a Solana dApp that gives any pump.fun or Solana token a **risk score from 0 to 100** (higher is safer). Data is pulled live from pump.fun, DexScreener, RugCheck, and Solana RPC, and every point in the score is backed by evidence. Coins that score badly get "attacked" by the PokeSnap mascot, **purely visually**. The utility ties into the **$PokeSnap** token: how many tokens you hold determines which feature tier you can access.
 
-## 2. Masalah & Target User
-- **Masalah:** di pump.fun ribuan koin baru muncul setiap hari. Sebagian besar dibundel, di-snipe, atau ditinggal dev (rug) dalam hitungan menit. Data risikonya tersebar di banyak tool (RugCheck, DexScreener, GMGN) dan sulit dibaca cepat.
-- **Target user:** trader dan degen pump.fun yang butuh penilaian cepat sebelum beli, pemburu meta, dan komunitas yang ingin memantau dev.
-- **Solusi:** satu skor, alasan yang jelas per faktor, dan reaksi visual yang langsung terbaca.
+## 2. Problem & Target Users
+- **Problem:** thousands of new coins launch on pump.fun every day. Most are bundled, sniped, or abandoned by their dev (rugged) within minutes. Risk data is scattered across many tools (RugCheck, DexScreener, GMGN) and is hard to read quickly.
+- **Target users:** pump.fun traders and degens who need a fast read before buying, meta hunters, and communities that want to keep an eye on devs.
+- **Solution:** one score, a clear reason for each factor, and a visual reaction you can read at a glance.
 
-## 3. Maskot & Reaksi Visual
-Maskotnya adalah makhluk rubah-tupai listrik orisinal berwarna hijau-kuning ala pump.fun (`src/components/HeroMascot.tsx`). Ia bernapas dan melayang, menoleh mengikuti kursor, memakai pose menyerang saat scan, lalu melompat sesuai hasilnya.
+## 3. Mascot & Visual Reactions
+The mascot is an original electric fox-squirrel creature in pump.fun-style green and yellow (`src/components/HeroMascot.tsx`). It breathes and floats, turns to follow the cursor, switches to an attack pose while scanning, and then jumps according to the result.
 
-Reaksi kartu koin (`src/components/Reaction.tsx`, `Shatter.tsx`) mengikuti verdict dari `score.ts`:
+Coin card reactions (`src/components/Reaction.tsx`, `Shatter.tsx`) follow the verdict from `score.ts`:
 
-| Skor | Verdict | Reaksi |
+| Score | Verdict | Reaction |
 |---|---|---|
-| 80–100 | safe | Maskot tenang, kartu bersinar |
-| 50–79 | caution | Kartu bergetar dengan percikan listrik |
-| 25–49 | suspicious | Petir menyambar dan retakan menjalar. Kartu **patah terbelah dua** dengan pinggiran gosong, lalu dicap **ZAPPED** |
-| 0–24 | danger | Maskot menyerang dan kartu **hancur jadi serpihan**. Percikan dan bara menyembur, lalu cap **ZAPPED** menghantam |
+| 80–100 | safe | Mascot stays calm, card glows |
+| 50–79 | caution | Card shakes with electric sparks |
+| 25–49 | suspicious | Lightning strikes and cracks spread. The card **snaps in two** with scorched edges, then gets stamped **ZAPPED** |
+| 0–24 | danger | Mascot attacks and the card **shatters into shards**. Sparks and embers burst out, then the **ZAPPED** stamp slams down |
 
-Semua efek ini **murni visual di website**. Tidak ada transaksi on-chain dan token tidak disentuh sama sekali.
+All of these effects are **purely visual on the website**. No on-chain transactions happen and no tokens are touched in any way.
 
-## 4. Fitur per Halaman
-| Halaman | Fitur | Akses |
+## 4. Features by Page
+| Page | Features | Access |
 |---|---|---|
-| `/` **Snap Scanner** | Tempel mint, lalu keluar kartu koin, skor, rincian faktor beserta bukti, status sumber data, dan reaksi visual | Free |
-| `/arena` **Live Arena** | Papan movers, recent, dan graduated yang di-skor otomatis setiap 60 detik | Scout+ |
-| `/meta` **Meta Radar** | Pengelompokan tema dengan aturan kata kunci (AI, RWA/oil, dev-fee, Pokémon-style, hewan, …), lengkap dengan jumlah koin, total mcap, dan rata-rata skor dari sampel | Scout+ |
-| `/shame` **Hall of Shame** | Semua koin dengan skor <25, disimpan di `data/hall-of-shame.json` | Free |
-| `/ask` **Ask PokeSnap** | Mode LLM kalau `OPENAI_API_KEY` diisi (tool call ke score engine). Kalau tidak, pakai perintah dasar: `score <mint>`, `top movers`, `safest graduated`, `riskiest movers`, `search <nama>` | Free |
-| `/watch` **Dev Watch** | Watchlist di localStorage yang di-skor ulang setiap dibuka dan menandai kalau saldo dev turun | Hunter+ |
-| `/self` **Self Score** | PokeSnap men-skor token $PokeSnap sendiri | Muncul jika `NEXT_PUBLIC_POKESNAP_MINT` diisi |
-| `/burn` **Burn Tracker** | Supply awal, supply saat ini (dari RPC), jumlah yang dibakar, dan persentasenya | Muncul jika `NEXT_PUBLIC_POKESNAP_MINT` diisi |
-| **Wallet** | Koneksi Phantom dan Solflare lewat Solana wallet adapter. Saldo $PokeSnap dibaca dari `/api/balance` | — |
+| `/` **Snap Scanner** | Paste a mint to get a coin card, score, factor breakdown with evidence, data source status, and a visual reaction | Free |
+| `/arena` **Live Arena** | Movers, recent, and graduated boards, scored automatically every 60 seconds | Scout+ |
+| `/meta` **Meta Radar** | Theme clustering using keyword rules (AI, RWA/oil, dev-fee, Pokémon-style, animals, …), with coin count, total mcap, and average score from a sample | Scout+ |
+| `/shame` **Hall of Shame** | Every coin scoring <25, stored in `data/hall-of-shame.json` | Free |
+| `/ask` **Ask PokeSnap** | LLM mode when `OPENAI_API_KEY` is set (tool calls into the score engine). Otherwise, basic commands: `score <mint>`, `top movers`, `safest graduated`, `riskiest movers`, `search <name>` | Free |
+| `/watch` **Dev Watch** | A localStorage watchlist that is re-scored on every visit and flags when a dev's balance drops | Hunter+ |
+| `/self` **Self Score** | PokeSnap scores the $PokeSnap token itself | Shown when `NEXT_PUBLIC_POKESNAP_MINT` is set |
+| `/burn` **Burn Tracker** | Initial supply, current supply (from RPC), amount burned, and burn percentage | Shown when `NEXT_PUBLIC_POKESNAP_MINT` is set |
+| **Wallet** | Phantom and Solflare via the Solana wallet adapter. $PokeSnap balance is read from `/api/balance` | — |
 
 ## 5. Score Engine (`src/lib/score.ts`, `src/lib/launch.ts`)
-**Rumus:** skor = (total poin faktor / total bobot faktor) × 100, lalu diterapkan hard cap.
+**Formula:** score = (total factor points / total factor weight) × 100, then hard caps are applied.
 
-| Faktor | Bobot | Sumber |
+| Factor | Weight | Source |
 |---|---|---|
-| Pola bundel holder (saldo top wallet hampir identik ±6%, flag korelasi RugCheck) | 25 | RugCheck |
-| Perilaku dev/creator (saldo dev 0 atau >10%, serial launcher) | 20 | RugCheck + pump.fun |
-| Konsentrasi top-10, di luar pool (>30% dapat 0) | 15 | RugCheck |
-| Likuiditas / market cap (<2% dapat 0) | 15 | DexScreener / pump.fun |
-| Mint & freeze authority (masing-masing 5 jika sudah di-revoke) | 10 | Solana RPC |
-| Jaringan insider | 10 | Graf insider RugCheck |
-| Umur & sosial (X/TG/web) | 5 | pump.fun / DexScreener |
-| Sniper & bundel saat launch | 20 | Feed trade pump.fun |
-| Dev exit (dari riwayat trade) | 10 | Trade pump.fun + saldo creator RugCheck |
-| Umur, kecepatan pump & wash trade | 10 | DexScreener + trade pump.fun |
+| Holder bundle pattern (top wallet balances nearly identical within ±6%, RugCheck correlation flag) | 25 | RugCheck |
+| Dev/creator behavior (dev balance 0 or >10%, serial launcher) | 20 | RugCheck + pump.fun |
+| Top-10 concentration, excluding pools (>30% scores 0) | 15 | RugCheck |
+| Liquidity / market cap (<2% scores 0) | 15 | DexScreener / pump.fun |
+| Mint & freeze authority (5 each if revoked) | 10 | Solana RPC |
+| Insider network | 10 | RugCheck insider graph |
+| Age & socials (X/TG/web) | 5 | pump.fun / DexScreener |
+| Snipers & bundles at launch | 20 | pump.fun trade feed |
+| Dev exit (from trade history) | 10 | pump.fun trades + RugCheck creator balance |
+| Age, pump velocity & wash trading | 10 | DexScreener + pump.fun trades |
 
-Kalau sebuah sumber data gagal, faktornya ditandai "no data" dan diberi setengah poin. Risiko berlevel "danger" dari RugCheck mengurangi skor hingga 15 poin.
+If a data source fails, its factor is marked "no data" and awarded half points. A "danger"-level risk from RugCheck deducts up to 15 points.
 
-**Forensik launch:** data diambil dari `swap-api.pump.fun/v2/coins/{mint}/trades`. Cursor-nya langsung melompat ke jendela launch, jadi deteksi tetap jalan untuk koin berumur berapa pun.
-- *Bundled at launch*: % supply yang dibeli di slot pembuatan.
-- *Snipers*: % supply yang dibeli di 10 slot pertama (~4 detik), termasuk dev (gaya GMGN).
-- *Dev exit*: dev menjual di feed trade, atau saldo creator di RugCheck = 0.
-- *Wash/dust*: porsi trade di bawah $1 dari 500 trade terakhir.
+**Launch forensics:** data comes from `swap-api.pump.fun/v2/coins/{mint}/trades`. The cursor jumps straight to the launch window, so detection works for coins of any age.
+- *Bundled at launch*: % of supply bought in the creation slot.
+- *Snipers*: % of supply bought in the first 10 slots (~4 seconds), including the dev (GMGN-style).
+- *Dev exit*: the dev sells in the trade feed, or the creator balance on RugCheck is 0.
+- *Wash/dust*: share of trades under $1 among the last 500 trades.
 
-**Hard cap:**
-- Sniper >50% atau bundel slot pembuatan >40% → skor ≤20. Berlaku selama koin berumur <24 jam atau wallet awal masih memegang >20%.
-- Jaringan insider RugCheck memegang >40% → ≤20.
-- ≥3 tanda berat sekaligus (sniper >30%, dev dump dalam 1 jam, koin baru dengan gerakan vertikal, banjir dust trade, bundel holder buruk, >15 insider) → ≤15.
-- Mint authority aktif → ≤30. Freeze authority aktif → ≤40. Status "rugged" dari RugCheck → ≤10.
+**Hard caps:**
+- Snipers >50% or creation-slot bundle >40% → score ≤20. Applies while the coin is <24 hours old or early wallets still hold >20%.
+- RugCheck insider network holds >40% → ≤20.
+- ≥3 severe flags at once (snipers >30%, dev dump within 1 hour, new coin with a vertical move, flood of dust trades, bad holder bundling, >15 insiders) → ≤15.
+- Mint authority active → ≤30. Freeze authority active → ≤40. "Rugged" status from RugCheck → ≤10.
 
-**Caching (in-memory):** pump.fun 30 detik, RugCheck 90 detik, RPC 30 detik, trade launch 20 detik. Request yang kena rate limit (429) dicoba ulang dengan backoff.
+**Caching (in-memory):** pump.fun 30 seconds, RugCheck 90 seconds, RPC 30 seconds, launch trades 20 seconds. Rate-limited requests (429) are retried with backoff.
 
-## 6. Utilitas Token & Tier
-Tier ditentukan oleh saldo $PokeSnap di wallet yang terhubung (`src/lib/tiers.ts`):
+## 6. Token Utility & Tiers
+Tiers are determined by the $PokeSnap balance of the connected wallet (`src/lib/tiers.ts`):
 
-| Tier | Saldo minimum | Akses |
+| Tier | Minimum balance | Access |
 |---|---|---|
 | Free | 0 | Snap Scanner, Hall of Shame, Ask PokeSnap |
-| Scout | 100.000 | + Live Arena, Meta Radar |
-| Hunter | 500.000 | + Watchlist / Dev Watch |
-| Alpha | 2.000.000 | Semua fitur + fitur prioritas |
+| Scout | 100,000 | + Live Arena, Meta Radar |
+| Hunter | 500,000 | + Watchlist / Dev Watch |
+| Alpha | 2,000,000 | All features + priority features |
 
-Gating diterapkan lewat komponen `Gate`. Jika `NEXT_PUBLIC_UNLOCK_ALL=true` (default sebelum launch), semua fitur terbuka tanpa melihat saldo.
+Gating is enforced by the `Gate` component. When `NEXT_PUBLIC_UNLOCK_ALL=true` (the default before launch), every feature is unlocked regardless of balance.
 
-## 7. Tokenomics (rencana)
-- Total supply: **1.000.000.000 $PokeSnap**, fair launch di pump.fun.
-- Rencana pembagian pendapatan: **40% buyback & burn**, **40% operasional**, **20% reward komunitas**.
-- Burn dapat diverifikasi on-chain lewat halaman Burn Tracker.
+## 7. Tokenomics (planned)
+- Total supply: **1,000,000,000 $PokeSnap**, fair launch on pump.fun.
+- Planned revenue split: **40% buyback & burn**, **40% operations**, **20% community rewards**.
+- Burns can be verified on-chain through the Burn Tracker page.
 
-*Catatan: pembagian pendapatan adalah kebijakan rencana dan belum diotomatisasi di kode.*
+*Note: the revenue split is a planned policy and is not yet automated in code.*
 
-## 8. Arsitektur & Tech Stack
-- **Next.js (App Router) + TypeScript**, Tailwind CSS, Framer Motion untuk animasi.
-- **Solana wallet adapter** untuk Phantom dan Solflare.
-- **API routes server-side** menjadi proxy dan agregator sumber data (`src/lib/sources.ts`, `fetcher.ts` dengan TTL cache dan timeout).
-- **Penyimpanan:** file JSON lokal untuk Hall of Shame (`src/lib/store.ts`) dan localStorage untuk watchlist.
+## 8. Architecture & Tech Stack
+- **Next.js (App Router) + TypeScript**, Tailwind CSS, and Framer Motion for animation.
+- **Solana wallet adapter** for Phantom and Solflare.
+- **Server-side API routes** act as a proxy and aggregator for data sources (`src/lib/sources.ts`, `fetcher.ts` with TTL caching and timeouts).
+- **Storage:** a local JSON file for the Hall of Shame (`src/lib/store.ts`) and localStorage for the watchlist.
 
 ## 9. API Endpoints
-| Endpoint | Fungsi |
+| Endpoint | Purpose |
 |---|---|
-| `GET /api/score?mint=` | Skor lengkap beserta faktor dan bukti |
-| `GET /api/arena?board=movers\|recent\|graduated` | Papan koin yang sudah di-skor |
-| `GET /api/meta` | Tema dan meta |
-| `GET /api/shame` | Daftar Hall of Shame |
+| `GET /api/score?mint=` | Full score with factors and evidence |
+| `GET /api/arena?board=movers\|recent\|graduated` | Scored coin boards |
+| `GET /api/meta` | Themes and metas |
+| `GET /api/shame` | Hall of Shame list |
 | `POST /api/chat` | Ask PokeSnap |
-| `GET /api/burn?mint=` | Statistik burn |
-| `GET /api/balance?owner=` | Saldo $PokeSnap dan tier |
-| `GET /api/health` | Status sumber data |
+| `GET /api/burn?mint=` | Burn statistics |
+| `GET /api/balance?owner=` | $PokeSnap balance and tier |
+| `GET /api/health` | Data source status |
 
 ## 10. Environment Variables
-| Variabel | Default | Fungsi |
+| Variable | Default | Purpose |
 |---|---|---|
-| `SOLANA_RPC_URL` | Mainnet publik | RPC di sisi server |
-| `NEXT_PUBLIC_SOLANA_RPC_URL` | Mainnet publik | RPC untuk wallet adapter |
-| `NEXT_PUBLIC_POKESNAP_MINT` | Kosong | Mint $PokeSnap. Mengaktifkan tier, Self Score, dan Burn Tracker |
-| `NEXT_PUBLIC_UNLOCK_ALL` | `true` | Membuka semua fitur (bypass gating) |
-| `OPENAI_API_KEY` / `OPENAI_MODEL` | Kosong / `gpt-4o-mini` | Mode LLM untuk Ask PokeSnap |
+| `SOLANA_RPC_URL` | Public mainnet | Server-side RPC |
+| `NEXT_PUBLIC_SOLANA_RPC_URL` | Public mainnet | RPC for the wallet adapter |
+| `NEXT_PUBLIC_POKESNAP_MINT` | Empty | $PokeSnap mint. Enables tiers, Self Score, and Burn Tracker |
+| `NEXT_PUBLIC_UNLOCK_ALL` | `true` | Unlocks every feature (bypasses gating) |
+| `OPENAI_API_KEY` / `OPENAI_MODEL` | Empty / `gpt-4o-mini` | LLM mode for Ask PokeSnap |
 
-## 11. Cara Menjalankan
+## 11. Getting Started
 ```bash
 npm install
 cp .env.example .env.local
 npm run dev            # http://localhost:3000
 npm run build && npm start   # production
 ```
-Butuh Node 18.18+ (sudah dites di Node 20).
+Requires Node 18.18+ (tested on Node 20).
 
-## 12. Keterbatasan yang Diketahui
-- Clustering sumber dana (wallet yang didanai dari induk yang sama), % fresh wallet, serta metrik "phishing" dan "Rug %" ala GMGN belum diimplementasikan, karena butuh riwayat per wallet yang terlalu berat untuk RPC publik.
-- Angka insider bergantung pada graf RugCheck, yang bisa melaporkan 0 padahal GMGN menunjukkan angka tinggi.
-- API frontend pump.fun tidak resmi dan bisa berubah. `trades/all` sudah tidak bisa dipakai (HTTP 400).
-- Swap-api bisa kena rate limit (429). Kalau masih gagal setelah dicoba ulang, faktornya ditampilkan "unknown".
-- Hall of Shame memakai file JSON lokal, jadi tidak cocok untuk serverless.
-- Maskotnya satu gambar utuh, jadi bagian seperti ekor belum bisa dianimasikan terpisah.
-- Koneksi wallet belum diuji end-to-end di produksi.
+## 12. Known Limitations
+- Funding-source clustering (wallets funded by the same parent), fresh-wallet %, and GMGN-style "phishing" and "Rug %" metrics are not implemented yet, because they need per-wallet history that is too heavy for public RPC.
+- Insider figures depend on RugCheck's graph, which can report 0 even when GMGN shows a high number.
+- The pump.fun frontend API is unofficial and may change. `trades/all` no longer works (HTTP 400).
+- The swap-api can be rate-limited (429). If it still fails after retries, the factor is shown as "unknown".
+- The Hall of Shame uses a local JSON file, so it is not suitable for serverless hosting.
+- The mascot is a single flat image, so parts like the tail can't be animated separately yet.
+- Wallet connection has not been tested end-to-end in production.
 
-## 13. Roadmap
-1. RPC berbayar (Helius/QuickNode) untuk deteksi insider, sumber dana, dan fresh wallet.
-2. Database persisten (Postgres/KV) untuk Hall of Shame, riwayat skor, dan watchlist lintas perangkat.
-3. Mode LLM Ask PokeSnap aktif secara default, dengan ringkasan risiko yang lebih natural.
-4. Notifikasi Dev Watch (Telegram/X bot) saat dev menjual.
-5. Maskot ter-rig (ekor dan ekspresi terpisah) untuk animasi yang lebih hidup.
-6. Otomatisasi buyback & burn serta reward untuk holder.
-7. Deploy produksi dan launch token $PokeSnap, lalu isi `NEXT_PUBLIC_POKESNAP_MINT`.
+## 13. Roadmap (planned)
+1. Paid RPC (Helius/QuickNode) for insider, funding-source, and fresh-wallet detection.
+2. A persistent database (Postgres/KV) for the Hall of Shame, score history, and cross-device watchlists.
+3. Ask PokeSnap LLM mode on by default, with more natural risk summaries.
+4. Dev Watch notifications (Telegram/X bot) when a dev sells.
+5. A rigged mascot (separate tail and expressions) for livelier animation.
+6. Automated buyback & burn and holder rewards.
+7. Production deployment and the $PokeSnap token launch, then setting `NEXT_PUBLIC_POKESNAP_MINT`.
 
 ## 14. Disclaimer
-PokeSnap adalah alat bantu analisis dan **bukan nasihat keuangan**. Skor bisa salah atau terlambat, jadi selalu lakukan riset sendiri (DYOR). Reaksi visual tidak memengaruhi token apa pun. PokeSnap adalah proyek **fan-made** dengan maskot orisinal dan tidak berafiliasi dengan Nintendo, Game Freak, atau The Pokémon Company. Pokémon adalah merek dagang milik masing-masing pemiliknya.
+PokeSnap is an analysis aid and **not financial advice**. Scores can be wrong or delayed, so always do your own research (DYOR). Visual reactions do not affect any token. PokeSnap is a **fan-made** project with an original mascot and is not affiliated with Nintendo, Game Freak, or The Pokémon Company. Pokémon is a trademark of its respective owners.
