@@ -1,5 +1,6 @@
 import { coinMcapUsd, dexToken, mintInfo, pumpCoin, rugReport, type DexPair, type PumpCoin, type RugReport } from "./sources";
 import { recordShame } from "./store";
+import { launchStats, SNIPE_SLOTS, type LaunchStats } from "./launch";
 
 export type FactorStatus = "good" | "warn" | "bad" | "unknown";
 export type Factor = {
@@ -85,6 +86,12 @@ export async function scoreMint(mint: string, { force = false } = {}): Promise<S
   const holders = (rug?.topHolders ?? []).filter((h) => !poolOwners.has(h.owner) && !poolOwners.has(h.address));
 
   const factors: Factor[] = [];
+  const creatorAddr = pump?.creator ?? rug?.creator ?? undefined;
+  const ageMs = pump?.created_timestamp ? Date.now() - pump.created_timestamp : undefined;
+  // launch forensics from pump.fun trade feed (seeks directly to the launch window)
+  const launchR = supply ? await launchStats(mint, creatorAddr, supply, pump?.created_timestamp) : undefined;
+  if (launchR) sources.push({ name: "pump.fun trades", ok: launchR.ok, ms: launchR.ms, error: launchR.ok ? undefined : launchR.error });
+  const L: LaunchStats | undefined = launchR?.ok ? launchR.data : undefined;
 
   // 1. Holder bundle pattern (25)
   {
@@ -250,7 +257,94 @@ export async function scoreMint(mint: string, { force = false } = {}): Promise<S
     factors.push({ key: "age", label: "Age & socials", weight: w, points, status: points >= 4 ? "good" : points >= 2 ? "warn" : "bad", evidence: ev });
   }
 
-  let score = Math.round(factors.reduce((a, f) => a + f.points, 0));
+  // 8. Snipers & launch bundle (20)
+  const launchFresh = ageMs != null && ageMs < 24 * 3.6e6;
+  const heldByEarly = L ? holders.filter((h) => L.earlyWallets.includes(h.owner)).reduce((a, h) => a + h.pct, 0) : 0;
+  {
+    const w = 20;
+    if (!L || !L.complete) {
+      factors.push({ key: "snipe", label: "Snipers & launch bundle", weight: w, points: L ? 14 : 10, status: "unknown", evidence: [L ? "Launch window not found in pump.fun trade feed (coin not launched on pump.fun?)" : "pump.fun trade feed unavailable"] });
+    } else {
+      const s = L.sniperPct, b = L.creationSlotBuyPct;
+      let points = s > 50 || b > 40 ? 0 : s > 30 || b > 20 ? 5 : s > 15 ? 11 : s > 7 ? 16 : 20;
+      // launch history fades once the coin has aged and the early wallets have distributed their bags
+      const faded = !launchFresh && heldByEarly < 5;
+      if (faded) points = Math.max(points, 10);
+      const ev = [
+        `Snipers: ${pct(s)} of supply bought in first ${SNIPE_SLOTS} slots (~4s) by ${L.sniperWallets} wallet(s)`,
+        `Bundled at launch: ${pct(b)} bought in the creation slot by ${L.creationSlotWallets} wallet(s)`,
+        ...L.topEarly.slice(0, 3).map((e) => `${short(e.wallet)} bought ${pct(e.pct)} at slot +${e.slot}${e.wallet === creatorAddr ? " (dev)" : ""}`),
+        `Early wallets still hold ${pct(heldByEarly)} (of top holders)`,
+        ...(faded ? ["Coin is >24h old and early wallets have exited — launch sniping weighs less now"] : []),
+      ];
+      factors.push({ key: "snipe", label: "Snipers & launch bundle", weight: w, points, status: points >= 16 ? "good" : points >= 8 ? "warn" : "bad", evidence: ev });
+    }
+  }
+
+  // 9. Dev exit (from trades) (10)
+  {
+    const w = 10;
+    if (!L || !creatorAddr) factors.push({ key: "devexit", label: "Dev exit (trade history)", weight: w, points: 5, status: "unknown", evidence: ["Trade history unavailable"] });
+    else if (!L.complete && L.devSoldPct === 0) factors.push({ key: "devexit", label: "Dev exit (trade history)", weight: w, points: 6, status: "unknown", evidence: [`No dev sells seen (launch window + last ${L.trades} trades)`] });
+    else {
+      const bought = L.devBoughtPct;
+      const ageH0 = ageMs != null ? ageMs / 3.6e6 : 1e9;
+      // dev bought a big bag at launch and now holds 0 → it was sold even if the sell trade isn't in our window
+      const exitedBag = bought > 5 && rug?.creatorBalance === 0;
+      const sold = Math.max(L.devSoldPct, exitedBag ? bought : 0);
+      const early = (L.firstSellSecs != null && L.firstSellSecs < 3600) || (exitedBag && ageH0 < 1);
+      const points = sold > 20 && early ? 0 : sold > 5 && early ? 3 : sold > 5 ? 6 : 10;
+      const ev = [`Dev bought ${pct(bought)} and sold ${pct(sold)} of supply`];
+      if (L.firstSellSecs != null) ev.push(`Dev first sold ${L.firstSellSecs < 120 ? `${L.firstSellSecs.toFixed(0)}s` : `${(L.firstSellSecs / 60).toFixed(1)} min`} after launch`);
+      if (exitedBag && L.devSoldPct < bought) ev.push(`Dev's launch bag (${pct(bought)}) is gone — creator balance is now 0${ageH0 < 1 ? ` within ${(ageH0 * 60).toFixed(0)} min of launch` : ""}`);
+      if (sold > 20 && early) ev.push("Dev dumped a large bag within the first hour — classic rug pattern");
+      factors.push({ key: "devexit", label: "Dev exit (trade history)", weight: w, points, status: points >= 8 ? "good" : points >= 4 ? "warn" : "bad", evidence: ev });
+    }
+  }
+
+  // 10. Age, pump velocity & wash trading (10)
+  const ch1h = best?.priceChange?.h1;
+  {
+    const w = 10;
+    const ageH = ageMs != null ? ageMs / 3.6e6 : undefined;
+    let points = 10;
+    const ev: string[] = [];
+    if (ageH != null && ch1h != null) {
+      ev.push(`Age ${ageH < 1 ? `${(ageH * 60).toFixed(0)} min` : `${ageH.toFixed(1)} h`}, 1h change ${ch1h.toFixed(0)}%`);
+      if (ageH < 1 && ch1h > 300) { points -= 6; ev.push("Brand-new coin with a vertical pump — exit-liquidity risk"); }
+      else if (ageH < 1 && ch1h < -80) { points -= 8; ev.push("Collapsed right after launch — liquidity already pulled/dumped"); }
+      else if (ageH < 6 && ch1h > 200) points -= 3;
+    } else ev.push("Age / price velocity unknown");
+    if (L) {
+      ev.push(`${(L.tinyTradeShare * 100).toFixed(0)}% of last ${L.trades} trades are < $1 (bot/wash/spam)`);
+      ev.push(`Recent buys ${L.buys} ($${L.buyUsd.toFixed(0)}) vs sells ${L.sells} ($${L.sellUsd.toFixed(0)})`);
+      if (L.tinyTradeShare > 0.6) { points -= 4; ev.push("Dust-trade flood — fake activity / wallet-phishing bots"); }
+      else if (L.tinyTradeShare > 0.35) points -= 2;
+    }
+    points = Math.max(0, points);
+    factors.push({ key: "velocity", label: "Age, pump velocity & wash trades", weight: w, points, status: points >= 8 ? "good" : points >= 4 ? "warn" : "bad", evidence: ev });
+  }
+
+  const totalW = factors.reduce((a, f) => a + f.weight, 0);
+  let score = Math.round((factors.reduce((a, f) => a + f.points, 0) / totalW) * 100);
+  const caps: string[] = [];
+  const cap = (n: number, why: string) => { if (score > n) { score = n; } caps.push(`Hard cap ≤${n}: ${why}`); };
+  const insiderCount = rug?.graphInsidersDetected ?? 0;
+  const insiderNetPct = supply ? ((rug?.insiderNetworks ?? []).reduce((a, n) => a + (n.tokenAmount ?? 0), 0) / (supply * 10 ** decimals)) * 100 : 0;
+  const launchMatters = launchFresh || heldByEarly > 20;
+  if (launchMatters && L?.complete && L.sniperPct > 50) cap(20, `snipers bought ${pct(L.sniperPct)} of supply in the first seconds`);
+  if (launchMatters && L?.complete && L.creationSlotBuyPct > 40) cap(20, `${pct(L.creationSlotBuyPct)} bundled in the creation slot`);
+  if (insiderNetPct > 40) cap(20, `insider networks hold ${pct(insiderNetPct)}`);
+  const severe = [
+    launchMatters && L?.complete && L.sniperPct > 30,
+    factors.find((f) => f.key === "devexit")?.points === 0,
+    (ageMs ?? 1e12) < 3.6e6 && ((ch1h ?? 0) > 300 || (ch1h ?? 0) < -80),
+    L && L.tinyTradeShare > 0.6,
+    factors.find((f) => f.key === "bundle")?.status === "bad",
+    insiderCount > 15,
+  ].filter(Boolean).length;
+  if (severe >= 3) cap(15, `${severe} severe red flags combined`);
+
   const reasons = factors.filter((f) => f.status === "bad").map((f) => `${f.label}: ${f.evidence[(f.key === "dev" || f.key === "bundle" || f.key === "age") && f.evidence.length > 1 ? 1 : 0]}`);
   // critical overrides: an active mint authority can print unlimited supply, freeze can trap holders
   const ma = chainMint ? chainMint.mintAuthority : rug?.token?.mintAuthority;
@@ -264,6 +358,7 @@ export async function scoreMint(mint: string, { force = false } = {}): Promise<S
     reasons.unshift("RugCheck marks this token as RUGGED");
   }
   (rug?.risks ?? []).filter((r) => r.level === "danger").forEach((r) => reasons.push(`RugCheck danger: ${r.name}`));
+  reasons.unshift(...caps);
 
   const result: ScoreResult = {
     mint,
