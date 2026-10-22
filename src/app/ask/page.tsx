@@ -10,7 +10,7 @@ export default function Ask() {
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<string>("");
   const end = useRef<HTMLDivElement>(null);
-  useEffect(() => end.current?.scrollIntoView({ behavior: "smooth" }), [msgs]);
+  useEffect(() => { end.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs]);
   const send = async (text = input) => {
     if (!text.trim() || busy) return;
     const next = [...msgs, { role: "user" as const, content: text }];
