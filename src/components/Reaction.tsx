@@ -14,6 +14,7 @@ function shake(seed: number, amp: number, n = 7) { const r = rng(seed); const x 
   x.push(0); y.push(0); rot.push(0); return { x, y, rotate: rot }; }
 import type { ScoreResult } from "@/lib/score";
 import { ipfs, pctf, scoreColor, usd } from "@/lib/format";
+import { TokenLogo } from "@/components/TokenLogo";
 
 const LEVEL_TXT = { safe: "SAFE", caution: "CAUTION", suspicious: "SUSPICIOUS", danger: "DANGER" } as const;
 
@@ -44,7 +45,7 @@ function CoinFace({ r, compact }: { r: ScoreResult; compact?: boolean }) {
   return (
     <div className="relative z-10 p-4">
       <div className="flex items-center gap-3">
-        {r.image ? <img src={ipfs(r.image)} alt="" onError={(e) => (e.currentTarget.style.visibility = "hidden")} className={`${compact ? "h-12 w-12" : "h-16 w-16"} rounded-xl object-cover`} /> : <div className="h-14 w-14 rounded-xl bg-coal-700" />}
+        <TokenLogo mint={r.mint} image={r.image} label={r.symbol} className={`${compact ? "h-12 w-12" : "h-16 w-16"} shrink-0 rounded-xl`} />
         <div className="min-w-0 flex-1">
           <div className="truncate text-lg font-black">{r.name}</div>
           <div className="text-sm text-pump">${r.symbol}</div>

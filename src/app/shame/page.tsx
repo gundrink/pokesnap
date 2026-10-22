@@ -1,4 +1,5 @@
 "use client";
+import { TokenLogo } from "@/components/TokenLogo";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -18,7 +19,7 @@ export default function Shame() {
           <motion.div key={e.mint} className="card scorched relative overflow-hidden border-red-900 p-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.25, 0.1, 0.25, 1], delay: Math.min(i, 10) * 0.035 }}>
             <div className="absolute right-2 top-3 rotate-12 rounded border-2 border-red-500 px-2 text-sm font-black tracking-widest text-red-500">ZAPPED</div>
             <div className="flex items-center gap-3">
-              {e.image ? <img src={ipfs(e.image)} alt="" className="h-12 w-12 rounded-lg object-cover grayscale" /> : <div className="h-12 w-12 rounded-lg bg-coal-700" />}
+              <TokenLogo mint={e.mint} image={e.image} label={e.symbol} className="h-12 w-12 shrink-0 rounded-lg grayscale" />
               <div>
                 <div className="font-black">{e.name} <span className="text-pump">${e.symbol}</span></div>
                 <div className="text-sm text-red-400">score {e.score} · {usd(e.marketCapUsd)}</div>

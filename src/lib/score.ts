@@ -1,6 +1,7 @@
 import { coinMcapUsd, dexToken, mintInfo, pumpCoin, rugReport, type DexPair, type PumpCoin, type RugReport } from "./sources";
 import { recordShame } from "./store";
 import { launchStats, SNIPE_SLOTS, type LaunchStats } from "./launch";
+import { funderStats, type FunderStats } from "./funders";
 
 export type FactorStatus = "good" | "warn" | "bad" | "unknown";
 export type Factor = {
@@ -21,6 +22,8 @@ export type ScoreResult = {
   score: number;
   level: "safe" | "caution" | "suspicious" | "danger";
   factors: Factor[];
+  severe: string[];
+  warnings: string[];
   reasons: string[];
   sources: SourceStatus[];
   metrics: {
@@ -81,7 +84,7 @@ export async function scoreMint(mint: string, { force = false } = {}): Promise<S
   rug?.markets?.forEach((m) => poolOwners.add(m.pubkey));
   pairs.forEach((p) => poolOwners.add(p.pairAddress));
   Object.entries(rug?.knownAccounts ?? {}).forEach(([addr, k]) => {
-    if (/amm|pool|curve|lock|burn/i.test(`${k.type} ${k.name}`)) poolOwners.add(addr);
+    if (/amm|pool|curve|lock|burn|cex|exchange|binance|coinbase|okx|bybit|kraken|bitget|gate|mexc|kucoin|htx|crypto\.com/i.test(`${k.type} ${k.name}`)) poolOwners.add(addr);
   });
   const holders = (rug?.topHolders ?? []).filter((h) => !poolOwners.has(h.owner) && !poolOwners.has(h.address));
 
@@ -89,7 +92,11 @@ export async function scoreMint(mint: string, { force = false } = {}): Promise<S
   const creatorAddr = pump?.creator ?? rug?.creator ?? undefined;
   const ageMs = pump?.created_timestamp ? Date.now() - pump.created_timestamp : undefined;
   // launch forensics from pump.fun trade feed (seeks directly to the launch window)
-  const launchR = supply ? await launchStats(mint, creatorAddr, supply, pump?.created_timestamp) : undefined;
+  let launchR = supply ? await launchStats(mint, creatorAddr, supply, pump?.created_timestamp) : undefined;
+  if (launchR && !launchR.ok && pump) { await new Promise((r) => setTimeout(r, 1500)); launchR = await launchStats(mint, creatorAddr, supply!, pump?.created_timestamp); }
+  const warnings: string[] = [];
+  const severe: string[] = [];
+  const funderP: Promise<FunderStats | undefined> = rug ? funderStats(holders.map((h) => ({ owner: h.owner, pct: h.pct }))).catch(() => undefined) : Promise.resolve(undefined);
   if (launchR) sources.push({ name: "pump.fun trades", ok: launchR.ok, ms: launchR.ms, error: launchR.ok ? undefined : launchR.error });
   const L: LaunchStats | undefined = launchR?.ok ? launchR.data : undefined;
 
@@ -263,18 +270,24 @@ export async function scoreMint(mint: string, { force = false } = {}): Promise<S
   {
     const w = 20;
     if (!L || !L.complete) {
-      factors.push({ key: "snipe", label: "Snipers & launch bundle", weight: w, points: L ? 14 : 10, status: "unknown", evidence: [L ? "Launch window not found in pump.fun trade feed (coin not launched on pump.fun?)" : "pump.fun trade feed unavailable"] });
+      if (pump) warnings.push(L ? "Launch window not reached in pump.fun trade feed — sniper/bundle check incomplete" : "pump.fun trade feed unavailable (rate-limited) — sniper/bundle check skipped, score is NOT boosted for it");
+      factors.push({ key: "snipe", label: "Snipers & launch bundle", weight: w, points: L ? 8 : 5, status: "unknown", evidence: [L ? "Launch window not found in pump.fun trade feed (coin not launched on pump.fun?)" : "pump.fun trade feed unavailable"] });
     } else {
       const s = L.sniperPct, b = L.creationSlotBuyPct;
       let points = s > 50 || b > 40 ? 0 : s > 30 || b > 20 ? 5 : s > 15 ? 11 : s > 7 ? 16 : 20;
       // launch history fades once the coin has aged and the early wallets have distributed their bags
-      const faded = !launchFresh && heldByEarly < 5;
+      // dev + a handful of wallets grabbing most of the supply in the creation slot = dev-bundled launch;
+      // that is permanent evidence of intent and never fades
+      const devBundled = b > 50 && L.creationSlotWallets <= 6;
+      if (devBundled) points = 0;
+      const faded = !devBundled && !launchFresh && heldByEarly < 5;
       if (faded) points = Math.max(points, 10);
       const ev = [
         `Snipers: ${pct(s)} of supply bought in first ${SNIPE_SLOTS} slots (~4s) by ${L.sniperWallets} wallet(s)`,
         `Bundled at launch: ${pct(b)} bought in the creation slot by ${L.creationSlotWallets} wallet(s)`,
         ...L.topEarly.slice(0, 3).map((e) => `${short(e.wallet)} bought ${pct(e.pct)} at slot +${e.slot}${e.wallet === creatorAddr ? " (dev)" : ""}`),
         `Early wallets still hold ${pct(heldByEarly)} (of top holders)`,
+        ...(devBundled ? [`Dev-bundled launch: ${L.creationSlotWallets} wallet(s) took ${pct(b)} in the creation slot — permanent red flag`] : []),
         ...(faded ? ["Coin is >24h old and early wallets have exited — launch sniping weighs less now"] : []),
       ];
       factors.push({ key: "snipe", label: "Snipers & launch bundle", weight: w, points, status: points >= 16 ? "good" : points >= 8 ? "warn" : "bad", evidence: ev });
@@ -284,8 +297,8 @@ export async function scoreMint(mint: string, { force = false } = {}): Promise<S
   // 9. Dev exit (from trades) (10)
   {
     const w = 10;
-    if (!L || !creatorAddr) factors.push({ key: "devexit", label: "Dev exit (trade history)", weight: w, points: 5, status: "unknown", evidence: ["Trade history unavailable"] });
-    else if (!L.complete && L.devSoldPct === 0) factors.push({ key: "devexit", label: "Dev exit (trade history)", weight: w, points: 6, status: "unknown", evidence: [`No dev sells seen (launch window + last ${L.trades} trades)`] });
+    if (!L || !creatorAddr) factors.push({ key: "devexit", label: "Dev exit (trade history)", weight: w, points: 3, status: "unknown", evidence: ["Trade history unavailable"] });
+    else if (!L.complete && L.devSoldPct === 0) factors.push({ key: "devexit", label: "Dev exit (trade history)", weight: w, points: 5, status: "unknown", evidence: [`No dev sells seen (launch window + last ${L.trades} trades)`] });
     else {
       const bought = L.devBoughtPct;
       const ageH0 = ageMs != null ? ageMs / 3.6e6 : 1e9;
@@ -325,25 +338,104 @@ export async function scoreMint(mint: string, { force = false } = {}): Promise<S
     factors.push({ key: "velocity", label: "Age, pump velocity & wash trades", weight: w, points, status: points >= 8 ? "good" : points >= 4 ? "warn" : "bad", evidence: ev });
   }
 
+  // 11. Price crash & sell pressure (15)
+  const ath = pump?.ath_market_cap && mcap ? Math.max(pump.ath_market_cap, mcap) : undefined; // pump.fun reports ATH in USD
+  const drawdown = ath && mcap && ath > mcap ? (1 - mcap / ath) * 100 : ath && mcap ? 0 : undefined;
+  const liveLiq = (best?.liquidity?.usd ?? 0) > 500;
+  const ch6h = liveLiq ? best?.priceChange?.h6 : undefined;
+  const ch1hLive = liveLiq ? ch1h : undefined;
+  const tx1 = best?.txns?.h1;
+  const sellDom = (L && L.sells > L.buys * 1.5 && L.sellUsd > L.buyUsd * 1.3) || (tx1 && tx1.sells > tx1.buys * 1.5);
+  {
+    const w = 15;
+    const ev: string[] = [];
+    let points = 15;
+    if (drawdown != null) ev.push(`Down ${drawdown.toFixed(0)}% from ATH market cap ${usd(ath)}`);
+    if (ch1hLive != null || ch6h != null) ev.push(`Price 1h ${ch1hLive?.toFixed(0) ?? "?"}%, 6h ${ch6h?.toFixed(0) ?? "?"}%`);
+    if (L) ev.push(`Recent flow: ${L.buys} buys ($${L.buyUsd.toFixed(0)}) vs ${L.sells} sells ($${L.sellUsd.toFixed(0)})`);
+    const young = (ageMs ?? 1e13) < 7 * 24 * 3.6e6; // ATH drawdown only signals a rug on young coins
+    const crashed = (young && (drawdown ?? 0) > 70) || (ch1hLive ?? 0) < -70 || (ch6h ?? 0) < -70;
+    if (crashed && sellDom) { points = 0; ev.push("Crashed >70% with sell-dominant flow — holders are exiting"); }
+    else if (crashed) { points = 4; ev.push("Crashed >70%"); }
+    else if ((young && (drawdown ?? 0) > 45) || (ch1hLive ?? 0) < -40) points = sellDom ? 6 : 9;
+    else if (sellDom) points = 11;
+    if (drawdown == null && ch1hLive == null && ch6h == null) { points = 7; ev.push("Price history unavailable"); }
+    factors.push({ key: "crash", label: "Price crash & sell pressure", weight: w, points, status: points >= 11 ? "good" : points >= 5 ? "warn" : "bad", evidence: ev });
+    if (crashed && sellDom && (ageMs ?? 1e13) < 7 * 24 * 3.6e6) severe.push(`Price crashed >70% (${drawdown != null ? `${drawdown.toFixed(0)}% off ATH` : "1h/6h"}) with sellers dominating`);
+  }
+
+  // 12. Same-funder wallet clusters & fresh wallets (10)
+  const F = await funderP;
+  {
+    const w = 10;
+    if (!F || !F.ok) {
+      if (rug) warnings.push(`Wallet-funding check unavailable (${F?.error ?? "RPC error"}) — insider clusters not verified`);
+      factors.push({ key: "cluster", label: "Same-funder clusters & fresh wallets", weight: w, points: 4, status: "unknown", evidence: [F?.error ?? "Funding trace unavailable"] });
+    } else {
+      const c = F.clusteredPct, fr = F.freshPct;
+      let points = c > 25 ? 0 : c > 12 ? 3 : c > 5 ? 6 : 10;
+      if (fr > 20) points = Math.max(0, points - 4); else if (fr > 8) points = Math.max(0, points - 2);
+      const ev = [`Traced first funding of ${F.checked} top holders`, `${F.clusters.length} same-funder cluster(s) holding ${pct(c)}`];
+      F.clusters.slice(0, 3).forEach((k) => ev.push(`${short(k.funder)} funded ${k.wallets.length} top wallets (${pct(k.pct)})`));
+      ev.push(`${F.fresh.length} fresh wallet(s) (<25 txs) holding ${pct(fr)}`);
+      factors.push({ key: "cluster", label: "Same-funder clusters & fresh wallets", weight: w, points, status: points >= 8 ? "good" : points >= 4 ? "warn" : "bad", evidence: ev });
+      if (c > 25) severe.push(`Insider cluster: same-funded wallets hold ${pct(c)}`);
+      if (fr > 30) severe.push(`Fresh wallets hold ${pct(fr)} of supply`);
+    }
+  }
+
+  // 13. RugCheck risk score (10)
+  {
+    const w = 10;
+    if (!rug) {
+      warnings.push("RugCheck unavailable — holder, insider and LP checks are incomplete");
+      factors.push({ key: "rugcheck", label: "RugCheck risk report", weight: w, points: 3, status: "unknown", evidence: ["RugCheck unavailable"] });
+    } else {
+      const n = rug.score_normalised ?? 0;
+      const dz = (rug.risks ?? []).filter((r) => r.level === "danger");
+      let points = n >= 70 ? 0 : n >= 50 ? 3 : n >= 30 ? 6 : 10;
+      points = Math.max(0, points - dz.length * 3);
+      const ev = [`RugCheck normalised risk ${n}/100`, ...(rug.risks ?? []).slice(0, 5).map((r) => `${r.level.toUpperCase()}: ${r.name}`)];
+      factors.push({ key: "rugcheck", label: "RugCheck risk report", weight: w, points, status: points >= 7 ? "good" : points >= 3 ? "warn" : "bad", evidence: ev });
+      if (dz.length >= 2 || n >= 70) severe.push(`RugCheck: ${dz.length} danger risk(s), normalised risk ${n}`);
+    }
+  }
+
   const totalW = factors.reduce((a, f) => a + f.weight, 0);
   let score = Math.round((factors.reduce((a, f) => a + f.points, 0) / totalW) * 100);
   const caps: string[] = [];
   const cap = (n: number, why: string) => { if (score > n) { score = n; } caps.push(`Hard cap ≤${n}: ${why}`); };
   const insiderCount = rug?.graphInsidersDetected ?? 0;
-  const insiderNetPct = supply ? ((rug?.insiderNetworks ?? []).reduce((a, n) => a + (n.tokenAmount ?? 0), 0) / (supply * 10 ** decimals)) * 100 : 0;
+  const insiderNetRaw = supply ? ((rug?.insiderNetworks ?? []).filter((n) => n.size <= 300).reduce((a, n) => a + (n.tokenAmount ?? 0), 0) / (supply * 10 ** decimals)) * 100 : 0;
+  // RugCheck network totals above 100% (huge airdrop/exchange graphs) are not meaningful → ignore
+  const insiderNetPct = insiderNetRaw > 100 ? 0 : insiderNetRaw;
+  const established = (mcap ?? 0) > 3e6 && (ageHours ?? 0) > 30 * 24 && (liquidity ?? 0) > 100e3; // long-lived, deep-liquidity coin: CEX/airdrop wallets dominate holder graphs
   const launchMatters = launchFresh || heldByEarly > 20;
   if (launchMatters && L?.complete && L.sniperPct > 50) cap(20, `snipers bought ${pct(L.sniperPct)} of supply in the first seconds`);
   if (launchMatters && L?.complete && L.creationSlotBuyPct > 40) cap(20, `${pct(L.creationSlotBuyPct)} bundled in the creation slot`);
-  if (insiderNetPct > 40) cap(20, `insider networks hold ${pct(insiderNetPct)}`);
-  const severe = [
-    launchMatters && L?.complete && L.sniperPct > 30,
-    factors.find((f) => f.key === "devexit")?.points === 0,
-    (ageMs ?? 1e12) < 3.6e6 && ((ch1h ?? 0) > 300 || (ch1h ?? 0) < -80),
-    L && L.tinyTradeShare > 0.6,
-    factors.find((f) => f.key === "bundle")?.status === "bad",
-    insiderCount > 15,
-  ].filter(Boolean).length;
-  if (severe >= 3) cap(15, `${severe} severe red flags combined`);
+  if (insiderNetPct > 40 && !established) cap(20, `insider networks hold ${pct(insiderNetPct)}`);
+  const fp = (k: string) => factors.find((f) => f.key === k);
+  if (L?.complete && L.creationSlotBuyPct > 50 && L.creationSlotWallets <= 6) severe.push(`Dev-bundled launch: ${pct(L.creationSlotBuyPct)} bought in the creation slot by ${L.creationSlotWallets} wallet(s)`);
+  else if (L?.complete && (L.sniperPct > 50 || L.creationSlotBuyPct > 40)) {
+    if (launchMatters) severe.push(`Launch sniped/bundled: ${pct(L.sniperPct)} sniped, ${pct(L.creationSlotBuyPct)} in creation slot`);
+  } else if (launchMatters && L?.complete && L.sniperPct > 30) severe.push(`Snipers took ${pct(L.sniperPct)} in the first seconds`);
+  if (fp("devexit")?.points === 0) severe.push("Dev dumped a large bag within the first hour");
+  if ((ageMs ?? 1e12) < 3.6e6 && (ch1hLive ?? 0) > 300 && (L?.sniperPct ?? 0) > 20) severe.push("Brand-new coin, vertical pump on a sniped launch");
+  if (L && L.tinyTradeShare > 0.6) severe.push("Dust-trade flood (fake activity / phishing bots)");
+  if (fp("bundle")?.points === 0) severe.push("Many wallets with near-identical balances (bundled distribution)");
+  if ((insiderCount > 15 && insiderCount < 400 && !established) || insiderNetPct > 25) severe.push(`RugCheck insider networks: ${insiderCount} wallets, ${pct(insiderNetPct)} of supply`);
+  if (top10 != null && top10 > 45 && !established) severe.push(`Top-10 wallets hold ${pct(top10)}`);
+  if (pump?.complete && liquidity != null && mcap && (liquidity < 3000 || liquidity / mcap < 0.01)) severe.push(`Liquidity pulled / tiny: ${usd(liquidity)} vs market cap ${usd(mcap)}`);
+  if (!pump && liquidity != null && liquidity < 1000) severe.push(`Almost no liquidity (${usd(liquidity)})`);
+  if (severe.length >= 2) cap(20, `${severe.length} severe red flags`);
+  else if (severe.length === 1) cap(45, `severe red flag: ${severe[0]}`);
+  const warnCount = factors.filter((f) => f.status === "bad" || f.status === "warn").length;
+  const unknownCount = factors.filter((f) => f.status === "unknown").length;
+  if (!established && factors.filter((f) => f.status === "bad").length >= 3) cap(45, "3+ failing checks");
+  else if (warnCount >= 7) cap(55, `${warnCount} checks are weak`);
+  if (pump && launchFresh && !L?.complete) cap(45, "fresh coin but launch sniper/bundle data unavailable — unverified, rescan in a minute");
+  if (unknownCount >= 3) cap(60, `${unknownCount} checks could not run — data unavailable`);
+
 
   const reasons = factors.filter((f) => f.status === "bad").map((f) => `${f.label}: ${f.evidence[(f.key === "dev" || f.key === "bundle" || f.key === "age") && f.evidence.length > 1 ? 1 : 0]}`);
   // critical overrides: an active mint authority can print unlimited supply, freeze can trap holders
@@ -352,23 +444,27 @@ export async function scoreMint(mint: string, { force = false } = {}): Promise<S
   if (ma) score = Math.min(score, 30);
   if (fa) score = Math.min(score, 40);
   const dangers = (rug?.risks ?? []).filter((r) => r.level === "danger").length;
-  if (dangers) score = Math.max(0, score - Math.min(15, dangers * 5));
+  if (dangers) score = Math.max(0, score - Math.min(20, dangers * 7));
   if (rug?.rugged) {
-    score = Math.min(score, 10);
+    score = 0;
     reasons.unshift("RugCheck marks this token as RUGGED");
   }
   (rug?.risks ?? []).filter((r) => r.level === "danger").forEach((r) => reasons.push(`RugCheck danger: ${r.name}`));
+  severe.forEach((x) => reasons.unshift(`SEVERE: ${x}`));
   reasons.unshift(...caps);
+  warnings.forEach((x) => reasons.push(`Data unavailable: ${x}`));
 
   const result: ScoreResult = {
     mint,
     name: pump?.name ?? rug?.tokenMeta?.name ?? best?.baseToken.symbol ?? "Unknown",
     symbol: pump?.symbol ?? rug?.tokenMeta?.symbol ?? best?.baseToken.symbol ?? "?",
-    image: pump?.image_uri,
+    image: pump?.image_uri || pairs.find((p) => p.info?.imageUrl)?.info?.imageUrl || rug?.fileMeta?.image || pump?.metadata_uri || undefined,
     description: pump?.description,
     score,
     level: levelOf(score),
     factors,
+    severe,
+    warnings,
     reasons: reasons.length ? reasons : factors.filter((f) => f.status === "warn").map((f) => `${f.label}: ${f.evidence[0]}`),
     sources,
     metrics: {
@@ -396,7 +492,8 @@ export async function scoreMint(mint: string, { force = false } = {}): Promise<S
     },
     scoredAt: Date.now(),
   };
-  resultCache.set(mint, { at: Date.now(), r: result });
+  // don't pin an incomplete result: rescans after a rate-limit should retry the sources
+  resultCache.set(mint, { at: warnings.length ? Date.now() - 45_000 : Date.now(), r: result });
   if (score < 25) await recordShame(result).catch(() => {});
   return result;
 }

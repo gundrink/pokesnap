@@ -4,6 +4,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import Gate from "@/components/Gate";
 import { ipfs, scoreColor, usd } from "@/lib/format";
+import { TokenLogo } from "@/components/TokenLogo";
 
 type Theme = { key: string; label: string; emoji: string; count: number; totalMcap: number; avgScore: number | null; scoredSample: number; top: { mint: string; name: string; symbol: string; image?: string; mcap?: number; score: number | null }[] };
 
@@ -34,7 +35,7 @@ function Radar() {
                 <div className="mt-3 space-y-1">
                   {t.top.map((c) => (
                     <Link key={c.mint} href={`/?mint=${c.mint}`} className="flex items-center gap-2 rounded-lg px-2 py-1 text-sm hover:bg-coal-800">
-                      {c.image ? <img src={ipfs(c.image)} className="h-6 w-6 rounded object-cover" alt="" /> : <span className="h-6 w-6 rounded bg-coal-700" />}
+                      <TokenLogo mint={c.mint} image={c.image} label={c.symbol} className="h-6 w-6 shrink-0 rounded" />
                       <span className="flex-1 truncate">{c.name} <span className="text-pump">${c.symbol}</span></span>
                       <span className="text-gray-500">{usd(c.mcap)}</span>
                       {c.score != null && <span className="font-bold" style={{ color: scoreColor(c.score) }}>{c.score}</span>}

@@ -28,6 +28,7 @@ export type PumpCoin = {
   pool_address?: string;
   last_trade_timestamp?: number;
   ath_market_cap?: number;
+  metadata_uri?: string;
 };
 
 export const coinMcapUsd = (c: PumpCoin) => c.market_cap_usd ?? c.usd_market_cap ?? undefined;
@@ -62,9 +63,10 @@ export type DexPair = {
   fdv?: number;
   marketCap?: number;
   volume?: { h24?: number };
-  priceChange?: { h1?: number; h24?: number };
+  priceChange?: { m5?: number; h1?: number; h6?: number; h24?: number };
+  txns?: { h1?: { buys: number; sells: number }; h6?: { buys: number; sells: number } };
   pairCreatedAt?: number;
-  info?: { socials?: { type: string; url: string }[]; websites?: { url: string }[] };
+  info?: { imageUrl?: string; socials?: { type: string; url: string }[]; websites?: { url: string }[] };
 };
 export function dexToken(mint: string) {
   return fetchJson<{ pairs: DexPair[] | null }>(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
@@ -86,7 +88,9 @@ export type RugReport = {
   graphInsidersDetected?: number;
   insiderNetworks?: { id: string; size: number; type: string; activeAccounts?: number; tokenAmount?: number }[] | null;
   creatorTokens?: unknown[] | null;
-  tokenMeta?: { name?: string; symbol?: string };
+  tokenMeta?: { name?: string; symbol?: string; uri?: string };
+  fileMeta?: { image?: string };
+  score?: number;
 };
 export function rugReport(mint: string) {
   return fetchJson<RugReport>(`https://api.rugcheck.xyz/v1/tokens/${mint}/report`, { ttlMs: 90_000, timeoutMs: 12_000 });

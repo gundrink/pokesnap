@@ -24,14 +24,24 @@ export type LaunchStats = {
 export const SNIPE_SLOTS = 10; // ~4 seconds
 const slotOf = (t: Trade) => Number(t.slotIndexId.slice(0, 12));
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+let gate: Promise<unknown> = Promise.resolve();
+// global throttle for swap-api.pump.fun (it 429s fast under parallel scans)
+function throttled<T>(fn: () => Promise<T>): Promise<T> {
+  const p = gate.then(() => sleep(150)).then(fn);
+  gate = p.catch(() => {});
+  return p;
+}
+
 async function pageTrades(mint: string, cursor: string, maxPages: number) {
   const out: Trade[] = [];
   for (let i = 0; i < maxPages; i++) {
     const url = `https://swap-api.pump.fun/v2/coins/${mint}/trades?limit=100&cursor=${encodeURIComponent(cursor)}`;
-    let r = await fetchJson<{ trades: Trade[]; pagination: { nextCursor?: string; hasMore?: boolean } }>(url, { ttlMs: 20_000, timeoutMs: 8_000 });
-    for (let a = 1; !r.ok && /429/.test(r.error) && a <= 3; a++) {
-      await new Promise((res) => setTimeout(res, 700 * a)); // rate-limited: back off and retry
-      r = await fetchJson(url, { ttlMs: 20_000, timeoutMs: 8_000, cacheKey: `${url}#retry${a}` });
+    type P = { trades: Trade[]; pagination: { nextCursor?: string; hasMore?: boolean } };
+    let r = await throttled(() => fetchJson<P>(url, { ttlMs: 20_000, timeoutMs: 8_000 }));
+    for (let a = 1; !r.ok && /429|timeout|HTTP 5/.test(r.error) && a <= 4; a++) {
+      await sleep(800 * a + Math.random() * 400); // rate-limited: back off and retry
+      r = await throttled(() => fetchJson<P>(url, { ttlMs: 20_000, timeoutMs: 8_000, cacheKey: `${url}#retry${a}-${Date.now()}` }));
     }
     if (!r.ok) return { trades: out, complete: false, error: r.error };
     out.push(...(r.data.trades ?? []));
